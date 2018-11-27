@@ -3,12 +3,13 @@ type lexresult = Tokens.token
 
 val lineNum = ErrorMsg.lineNum
 val linePos = ErrorMsg.linePos
-(*全都是指针类型*)
+(* "ref" means they are all pointer. *)
 val commentLen = ref 0
 val stringPos = ref 0
 val stringCon = ref ""
 fun err(p1,p2) = ErrorMsg.error p1
 
+(* if comment doesn't end there is a EOF error*)
 fun eof() = 
 let val pos = hd(!linePos) 
 in if !commentLen = 0 then ()
@@ -22,7 +23,7 @@ quote = \";
 
 %%
 <INITIAL,COMMENT> {newline} => (lineNum := !lineNum+1; linePos := yypos :: !linePos; continue());
-<INITIAL,COMMENT> {white}*  => (continue());
+<INITIAL,COMMENT> {white}+  => (continue());
 
 <INITIAL> "var"   => (Tokens.VAR(yypos,yypos+3));
 <INITIAL> "function"  => (Tokens.FUNCTION(yypos,yypos+8));
@@ -69,7 +70,6 @@ quote = \";
 <INITIAL> [a-zA-Z][a-zA-Z0-9]*  => (Tokens.ID(yytext,yypos,yypos+size yytext));
 <INITIAL> [0-9]+  => (Tokens.INT(valOf(Int.fromString yytext),yypos,yypos+size yytext));
 <INITIAL> .       => (ErrorMsg.error yypos ("illegal character " ^ yytext); continue());
-
 
 <COMMENT> "*/"  => (YYBEGIN INITIAL; commentLen := 0; continue());
 <COMMENT> .     => (continue());
