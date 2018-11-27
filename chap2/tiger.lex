@@ -1,3 +1,12 @@
+(*  scanner
+  I think this scanner just support these:
+    1.handle comments;
+    2.handle strings;
+    3.handle EOF error;
+  in the future I want to support:
+    1.\
+    2.why didn't I see the number of line???
+------------------------------------------------------------------*)
 type pos = int
 type lexresult = Tokens.token
 

@@ -102,6 +102,10 @@ STRING | COMMENT | INITIAL
     structure UserDeclarations = 
       struct
 
+(*  scanner
+  I think this scanner just implement these:
+    1.
+------------------------------------------------------------------*)
 type pos = int
 type lexresult = Tokens.token
 
