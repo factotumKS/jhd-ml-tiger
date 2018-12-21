@@ -4,4 +4,4 @@ try to implement a tiger compiler with SML and his textbook
 Highly recommand!
 
 # 字符串算法
-try some string algorithms in <Introduction to Algorithms>
+try some string algorithms in "Introduction to Algorithms"
