@@ -1,10 +1,10 @@
 #include "mycompiler.h"
 
-extern void lexer(FILE*);
+FILE* fp;   //指向源文件的全局指针
 
 //枚举标记类型
 void main () {
-    FILE* fp = fopen("/home/factotum/test.c", "r");
-    lexer(fp);
+    fp = fopen("test.c", "r");
+    lexer();
     fclose(fp);
 }
