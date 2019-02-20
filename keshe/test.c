@@ -1,8 +1,5 @@
 int a = 1; 
-/*
-fuck your mother
-**/
-int b = 2;  //cesh
+int b = 2;
 c = a + b;
 void main() {
     return;
