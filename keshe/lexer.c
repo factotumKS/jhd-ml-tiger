@@ -27,7 +27,7 @@ void lexer () {
     int row = 1;
     int col = 0;
     token* ptk = words;
-    char* pit = (char*)IDENT_TEXT;
+    char* pit = IDENT_TEXT[0];
     char* pcc = CHAR_TEXT;
     int* pic = INT_TEXT;
     float* pfc = FLOAT_TEXT;
@@ -66,44 +66,44 @@ void lexer () {
         //处理标识符&关键字
         if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
             int i = 0;
-            do{*(pit + i) = c; pit++; col += 1;}
+            do{*(pit + i) = c; col += 1;}
             while((c = fgetc(fp)) && ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')));
             ungetc(c, fp);
             *(pit + i) = 0;  //拼接标识符或者关键字
-            if      (pit, "if")       {ptk->name = IF;       ptk++; continue;} 
-            else if (pit, "do")       {ptk->name = DO;       ptk++; continue;} 
-            else if (pit, "int")      {ptk->name = INT;      ptk++; continue;}
-            else if (pit, "for")      {ptk->name = FOR;      ptk++; continue;}
-            else if (pit, "else")     {ptk->name = ELSE;     ptk++; continue;}  
-            else if (pit, "auto")     {ptk->name = AUTO;     ptk++; continue;}  
-            else if (pit, "void")     {ptk->name = VOID;     ptk++; continue;} 
-            else if (pit, "case")     {ptk->name = CASE;     ptk++; continue;} 
-            else if (pit, "long")     {ptk->name = LONG;     ptk++; continue;}  
-            else if (pit, "char")     {ptk->name = CHAR;     ptk++; continue;} 
-            else if (pit, "enum")     {ptk->name = ENUM;     ptk++; continue;} 
-            else if (pit, "goto")     {ptk->name = GOTO;     ptk++; continue;} 
-            else if (pit, "break")    {ptk->name = BREAK;    ptk++; continue;} 
-            else if (pit, "const")    {ptk->name = CONST;    ptk++; continue;}   
-            else if (pit, "union")    {ptk->name = UNION;    ptk++; continue;}  
-            else if (pit, "short")    {ptk->name = SHORT;    ptk++; continue;}  
-            else if (pit, "float")    {ptk->name = FLOAT;    ptk++; continue;} 
-            else if (pit, "while")    {ptk->name = WHILE;    ptk++; continue;} 
-            else if (pit, "double")   {ptk->name = DOUBLE;   ptk++; continue;} 
-            else if (pit, "extern")   {ptk->name = EXTERN;   ptk++; continue;} 
-            else if (pit, "static")   {ptk->name = STATIC;   ptk++; continue;}
-            else if (pit, "static")   {ptk->name = STATIC;   ptk++; continue;}  
-            else if (pit, "signed")   {ptk->name = SIGNED;   ptk++; continue;} 
-            else if (pit, "switch")   {ptk->name = SWITCH;   ptk++; continue;}
-            else if (pit, "struct")   {ptk->name = STRUCT;   ptk++; continue;}    
-            else if (pit, "return")   {ptk->name = RETURN;   ptk++; continue;}
-            else if (pit, "sizeof")   {ptk->name = SIZEOF;   ptk++; continue;}   
-            else if (pit, "typedef")  {ptk->name = TYPEDEF;  ptk++; continue;}
-            else if (pit, "default")  {ptk->name = DEFAULT;  ptk++; continue;} 
-            else if (pit, "unsigned") {ptk->name = UNSIGNED; ptk++; continue;} 
-            else if (pit, "continue") {ptk->name = CONTINUE; ptk++; continue;} 
-            else if (pit, "volatile") {ptk->name = VOLATILE; ptk++; continue;}
-            else pit += IDLENGH;
-            (ptk->text).pchar = pit;      ptk->name = IDENT;    ptk++; continue;
+            //printf("%s\n\n", pit);
+            if      (!strcmp(pit, "if")      ) {ptk->name = IF;       ptk++; continue;} 
+            else if (!strcmp(pit, "do")      ) {ptk->name = DO;       ptk++; continue;} 
+            else if (!strcmp(pit, "int")     ) {ptk->name = INT;      ptk++; continue;}
+            else if (!strcmp(pit, "for")     ) {ptk->name = FOR;      ptk++; continue;}
+            else if (!strcmp(pit, "else")    ) {ptk->name = ELSE;     ptk++; continue;}  
+            else if (!strcmp(pit, "auto")    ) {ptk->name = AUTO;     ptk++; continue;}  
+            else if (!strcmp(pit, "void")    ) {ptk->name = VOID;     ptk++; continue;} 
+            else if (!strcmp(pit, "case")    ) {ptk->name = CASE;     ptk++; continue;} 
+            else if (!strcmp(pit, "long")    ) {ptk->name = LONG;     ptk++; continue;}  
+            else if (!strcmp(pit, "char")    ) {ptk->name = CHAR;     ptk++; continue;} 
+            else if (!strcmp(pit, "enum")    ) {ptk->name = ENUM;     ptk++; continue;} 
+            else if (!strcmp(pit, "goto")    ) {ptk->name = GOTO;     ptk++; continue;} 
+            else if (!strcmp(pit, "break")   ) {ptk->name = BREAK;    ptk++; continue;} 
+            else if (!strcmp(pit, "const")   ) {ptk->name = CONST;    ptk++; continue;}   
+            else if (!strcmp(pit, "union")   ) {ptk->name = UNION;    ptk++; continue;}  
+            else if (!strcmp(pit, "short")   ) {ptk->name = SHORT;    ptk++; continue;}  
+            else if (!strcmp(pit, "float")   ) {ptk->name = FLOAT;    ptk++; continue;} 
+            else if (!strcmp(pit, "while")   ) {ptk->name = WHILE;    ptk++; continue;} 
+            else if (!strcmp(pit, "double")  ) {ptk->name = DOUBLE;   ptk++; continue;} 
+            else if (!strcmp(pit, "extern")  ) {ptk->name = EXTERN;   ptk++; continue;} 
+            else if (!strcmp(pit, "static")  ) {ptk->name = STATIC;   ptk++; continue;}
+            else if (!strcmp(pit, "static")  ) {ptk->name = STATIC;   ptk++; continue;}  
+            else if (!strcmp(pit, "signed")  ) {ptk->name = SIGNED;   ptk++; continue;} 
+            else if (!strcmp(pit, "switch")  ) {ptk->name = SWITCH;   ptk++; continue;}
+            else if (!strcmp(pit, "struct")  ) {ptk->name = STRUCT;   ptk++; continue;}    
+            else if (!strcmp(pit, "return")  ) {ptk->name = RETURN;   ptk++; continue;}
+            else if (!strcmp(pit, "sizeof")  ) {ptk->name = SIZEOF;   ptk++; continue;}   
+            else if (!strcmp(pit, "typedef") ) {ptk->name = TYPEDEF;  ptk++; continue;}
+            else if (!strcmp(pit, "default") ) {ptk->name = DEFAULT;  ptk++; continue;} 
+            else if (!strcmp(pit, "unsigned")) {ptk->name = UNSIGNED; ptk++; continue;} 
+            else if (!strcmp(pit, "continue")) {ptk->name = CONTINUE; ptk++; continue;} 
+            else if (!strcmp(pit, "volatile")) {ptk->name = VOLATILE; ptk++; continue;}
+            else {ptk->text = pit; pit += IDLENGH; ptk->name = IDENT; ptk++; continue;}
         }
 
 
@@ -136,9 +136,9 @@ void lexer () {
             case '>' : c = fgetc(fp); if (c == '=') { ptk->name = GE;     ptk++; col += 2; break;}
                                       ungetc(c, fp);  ptk->name = GT;     ptk++; col += 1; break;
             case '|' : c = fgetc(fp); if (c == '|') { ptk->name = LOR;    ptk++; col += 2; break;}
-                                      ungetc(c, fp); printlexererror(row, col); col += 1;   break;
+                                      ungetc(c, fp); printlexererror(row, col);  col += 1; break;
             case '&' : c = fgetc(fp); if (c == '&') { ptk->name = LAN;    ptk++; col += 2; break;}
-                                      ungetc(c, fp); printlexererror(row, col); col += 1;   break;
+                                      ungetc(c, fp); printlexererror(row, col);  col += 1; break;
             case '%' : ptk->name = MOD; ptk++; col += 1; break;
             case '*' : ptk->name = MUL; ptk++; col += 1; break;
             case '(' : ptk->name = LP;  ptk++; col += 1; break;
@@ -148,27 +148,28 @@ void lexer () {
             case '{' : ptk->name = LC;  ptk++; col += 1; break;
             case '}' : ptk->name = RC;  ptk++; col += 1; break;
             case ';' : ptk->name = SEM; ptk++; col += 1; break;
-            case '/' : c = fgetc(fp); if (c == '/') state = 1; 
-                                 else if (c == '*') state = 2;
-                                    else {ungetc(c, fp); ptk->name = DIV;    ptk++; col +=1;}
-                                    break;
+            case '/' : c = fgetc(fp); if (c == '/') {state = 1; break;}
+                                 else if (c == '*') {state = 2; break;}
+                                    else {ungetc(c, fp); ptk->name = DIV; ptk++; col +=1; break;}
             default :
                 if (feof(fp)) { fin = 1; break;}
                 col += 1;
                 printlexererror(row, col);
                 continue;    //报错
         }
-        printf("%c\n", c);
     }
 
     //单词表完毕之后设置边界，在后一个元素上的name标记为-1
     ptk->name = -1;
 
-    //单词表完毕之后打印单词表
+    //打印单词表
     for(token* i = words; i->name >=0; i++) {
-        if (i->name = IDENT) printf("%s : %s\n", TYPE[i->name], (i->text).pchar);
+        if (i->name == IDENT) printf("%s : %s\n", TYPE[i->name], i->text);
         else printf("%s\n", TYPE[i->name]);
 
+    }
+    for (int i = 0; i < IDLENGH; i++) {
+        printf("%s\n", IDENT_TEXT[i]);
     }
 }
 

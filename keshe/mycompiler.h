@@ -4,14 +4,9 @@
 #include <stdio.h>
 #include <string.h>
 //储存单词表的数据结构
-typedef union { //保存指向附加信息text的指针
-    char*   pchar;  //同时表示ident的text和char常量
-    int*    pint;
-    float*  pfloat;
-} point;
 typedef struct { //表示每个单词token
     int name;
-    point text;
+    char* text;  //所有的指针类型都只占一个字节
 } token;
 
 extern void lexer();
