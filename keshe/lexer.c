@@ -10,8 +10,7 @@
 #include "mycompiler.h"
 #define IDLENGH 32
 
-typedef enum {AUTO=0, SHORT, INT, LONG, FLOAT, DOUBLE, CHAR, STRUCT, UNION, ENUM, TYPEDEF, CONST, UNSIGNED, SIGNED, EXTERN, REGISTER, STATIC, VOLATILE, VOID, ELSE, SWITCH, CASE, FOR, DO, WHILE, GOTO, CONTINUE, BREAK, DEFAULT, SIZEOF, RETURN, IF, IDENT, INT_CONST, FLOAT_CONST, CHAR_CONST, STRING, EQ, ASSIGN, INC, ADD, DEC, SUB, NE, LE, LT, GE, GT, LOR, LAN, NO, MOD, MUL, LP, RP, LK, RK, LC, RC, SEM, DIV, RCOMMENT, BCOMMENT, ERROR_TOKEN};
-const char* TYPE[] = {"auto", "short", "int", "long", "float", "double", "char", "struct", "union", "enum", "typedef", "const", "unsigned", "signed", "extern", "register", "static", "volatile", "void", "else", "switch", "case", "for", "do", "while", "goto", "continue", "break", "default", "sizeof", "return", "if", "ident", "int const", "float_const", "char_const", "string", "==", "=", "++", "+", "--", "-", "!=", "<=", "<", ">=", ">", "||", "&&", "!", "%", "*", "(", ")", "[", "]", "{", "}", ";", "/", "//", "/*", "error"};
+const char* TYPE[] = {"auto", "short", "int", "long", "float", "double", "char", "struct", "union", "enum", "typedef", "const", "unsigned", "signed", "extern", "register", "static", "volatile", "void", "else", "switch", "case", "for", "do", "while", "goto", "continue", "break", "default", "sizeof", "return", "if", "ident", "int_const", "float_const", "char_const", "string", "==", "=", "++", "+", "--", "-", "!=", "<=", "<", ">=", ">", "||", "&&", "!", "%", "*", "(", ")", "[", "]", "{", "}", ";", "/"};
 token words[2048];
 char IDENT_TEXT[128][IDLENGH];
 char CHAR_TEXT[128];
@@ -66,11 +65,25 @@ void lexer () {
         //处理标识符&关键字
         if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
             int i = 0;
-            do{*(pit + i) = c; col += 1;}
+            do{*(pit + i) = c; i++; col += 1;}
             while((c = fgetc(fp)) && ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')));
             ungetc(c, fp);
             *(pit + i) = 0;  //拼接标识符或者关键字
-            //printf("%s\n\n", pit);
+            i = 0;
+            for (; i < 32; i++) { //识别是否为关键字
+                if (!strcmp(pit, TYPE[i])) {
+                    ptk->name = i; ptk++; break;
+                }
+            }
+            if (i == 32) { //为标识符
+                ptk->text = pit; 
+                pit += IDLENGH; 
+                ptk->name = IDENT; 
+                ptk++; 
+                continue;
+            }
+        }
+/*
             if      (!strcmp(pit, "if")      ) {ptk->name = IF;       ptk++; continue;} 
             else if (!strcmp(pit, "do")      ) {ptk->name = DO;       ptk++; continue;} 
             else if (!strcmp(pit, "int")     ) {ptk->name = INT;      ptk++; continue;}
@@ -103,17 +116,33 @@ void lexer () {
             else if (!strcmp(pit, "unsigned")) {ptk->name = UNSIGNED; ptk++; continue;} 
             else if (!strcmp(pit, "continue")) {ptk->name = CONTINUE; ptk++; continue;} 
             else if (!strcmp(pit, "volatile")) {ptk->name = VOLATILE; ptk++; continue;}
-            else {ptk->text = pit; pit += IDLENGH; ptk->name = IDENT; ptk++; continue;}
         }
+        */
 
-
-        //处理int常量
+        //检查整数类型
         /*
-        if (c > '0' && c < '9') {
-            do{token_text[i++] = c;}
-            while((c=fgetc(fp)) && (c > '0' && c < '9'));
-            ungetc(c, fp);
-            return 
+        int base = 0;
+        pit[0] = c; pit[1] = fgetc(fp); pit[2] = fgetc(fp);
+        if (((pit[0] > '0' && pit[2] <= '9') && (pit[1] >= '0' && pit[1] <= '9') && (pit[2] >= '0' && pit[2] <= '9'))
+           ||(pit[0] == '-'                  && (pit[1] > '0' && pit[1] <= '9')  && (pit[2] >= '0' && pit[2] <= '9'))
+           ||(pit[0] == '0'                  && (pit[1] > '0' && pit[1] <= '9')  && (pit[2] >= '0' && pit[2] <= '9'))
+           ||(pit[0] == '-'                  && pit[1] == '0'                    && (pit[2] > '0' && pit[2] <= '9'))
+           ||(pit[0] == '0'                  && pit[1] == 'x'                    && (pit[2] > '0' && pit[2] <= '9'))
+           ||(pit[0] == '-'                  && pit[1] == '0'                    && pit[2] == 'x')) { //负数和三种进制
+            int i = 3;
+            while ((c = fgetc(fp)) && (c >= '0' && c <= '9')) {
+                pit[i] = c;
+                i++;
+            }
+            pit[i] == 0; //收尾构造字符串
+            col += i;
+        }
+        if (c == ' ' || c == '\t' || c == '\n') { //确认接收到数字常量
+            ungetc(c, fp); ptk->name = INT_CONST; ptk->text = pit; pit += IDLENGH; ptk++;
+        }
+        else { //错误读取
+            ungetc(pit[2], fp); ungetc(pit[1], fp); c = pit[0]; //恢复原状
+            printlexererror(row, col);
         }
         */
 
@@ -165,11 +194,9 @@ void lexer () {
     //打印单词表
     for(token* i = words; i->name >=0; i++) {
         if (i->name == IDENT) printf("%s : %s\n", TYPE[i->name], i->text);
+        else if (i->name ==INT_CONST) printf("%s : %s\n", TYPE[i->name], i->text);
         else printf("%s\n", TYPE[i->name]);
 
-    }
-    for (int i = 0; i < IDLENGH; i++) {
-        printf("%s\n", IDENT_TEXT[i]);
     }
 }
 
