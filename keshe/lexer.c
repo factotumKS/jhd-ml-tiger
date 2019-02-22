@@ -83,41 +83,6 @@ void lexer () {
                 continue;
             }
         }
-/*
-            if      (!strcmp(pit, "if")      ) {ptk->name = IF;       ptk++; continue;} 
-            else if (!strcmp(pit, "do")      ) {ptk->name = DO;       ptk++; continue;} 
-            else if (!strcmp(pit, "int")     ) {ptk->name = INT;      ptk++; continue;}
-            else if (!strcmp(pit, "for")     ) {ptk->name = FOR;      ptk++; continue;}
-            else if (!strcmp(pit, "else")    ) {ptk->name = ELSE;     ptk++; continue;}  
-            else if (!strcmp(pit, "auto")    ) {ptk->name = AUTO;     ptk++; continue;}  
-            else if (!strcmp(pit, "void")    ) {ptk->name = VOID;     ptk++; continue;} 
-            else if (!strcmp(pit, "case")    ) {ptk->name = CASE;     ptk++; continue;} 
-            else if (!strcmp(pit, "long")    ) {ptk->name = LONG;     ptk++; continue;}  
-            else if (!strcmp(pit, "char")    ) {ptk->name = CHAR;     ptk++; continue;} 
-            else if (!strcmp(pit, "enum")    ) {ptk->name = ENUM;     ptk++; continue;} 
-            else if (!strcmp(pit, "goto")    ) {ptk->name = GOTO;     ptk++; continue;} 
-            else if (!strcmp(pit, "break")   ) {ptk->name = BREAK;    ptk++; continue;} 
-            else if (!strcmp(pit, "const")   ) {ptk->name = CONST;    ptk++; continue;}   
-            else if (!strcmp(pit, "union")   ) {ptk->name = UNION;    ptk++; continue;}  
-            else if (!strcmp(pit, "short")   ) {ptk->name = SHORT;    ptk++; continue;}  
-            else if (!strcmp(pit, "float")   ) {ptk->name = FLOAT;    ptk++; continue;} 
-            else if (!strcmp(pit, "while")   ) {ptk->name = WHILE;    ptk++; continue;} 
-            else if (!strcmp(pit, "double")  ) {ptk->name = DOUBLE;   ptk++; continue;} 
-            else if (!strcmp(pit, "extern")  ) {ptk->name = EXTERN;   ptk++; continue;} 
-            else if (!strcmp(pit, "static")  ) {ptk->name = STATIC;   ptk++; continue;}
-            else if (!strcmp(pit, "static")  ) {ptk->name = STATIC;   ptk++; continue;}  
-            else if (!strcmp(pit, "signed")  ) {ptk->name = SIGNED;   ptk++; continue;} 
-            else if (!strcmp(pit, "switch")  ) {ptk->name = SWITCH;   ptk++; continue;}
-            else if (!strcmp(pit, "struct")  ) {ptk->name = STRUCT;   ptk++; continue;}    
-            else if (!strcmp(pit, "return")  ) {ptk->name = RETURN;   ptk++; continue;}
-            else if (!strcmp(pit, "sizeof")  ) {ptk->name = SIZEOF;   ptk++; continue;}   
-            else if (!strcmp(pit, "typedef") ) {ptk->name = TYPEDEF;  ptk++; continue;}
-            else if (!strcmp(pit, "default") ) {ptk->name = DEFAULT;  ptk++; continue;} 
-            else if (!strcmp(pit, "unsigned")) {ptk->name = UNSIGNED; ptk++; continue;} 
-            else if (!strcmp(pit, "continue")) {ptk->name = CONTINUE; ptk++; continue;} 
-            else if (!strcmp(pit, "volatile")) {ptk->name = VOLATILE; ptk++; continue;}
-        }
-        */
 
         //检查整数类型
         /*

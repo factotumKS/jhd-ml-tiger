@@ -10,12 +10,12 @@ typedef struct { //表示每个单词token
     char* text;  //所有的指针类型都只占一个字节
 } token;
 //词法分析
-typedef struct {
+typedef struct node{
     token tk;
-    astnode* father; //父结点
-    astnode* brother;//兄弟结点
-    astnode* child;  //子结点
-} astnode;
+    struct node* father; //父结点
+    struct astnode* brother;//兄弟结点
+    struct astnode* child;  //子结点
+} astnode;   
 
 extern void lexer();
 extern FILE* fp;
