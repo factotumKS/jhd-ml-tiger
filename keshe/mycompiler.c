@@ -8,7 +8,7 @@ enum token_kind { //词法分析返回的token种类
     LP, RP, LC, RC, COMMA, SEMI, RETURN;
 };
 enum node_kind{ //语法分析返回的node种类
-    PROGRAM, EXT_VAR_DEF, EXT_VAR, EXT_FUNC
+    PROGRAM, EXT_DEF_LIST, EXT_VAR_DEF, EXT_VAR, FUNC_DEF,
 };
 char* TYPE[] = {
     "int", "float", "char", "if", "else", "do", "while", "for", "continue", "break",
@@ -154,7 +154,7 @@ ASTnode* program() {
 //！！！语法单位<外部定义序列>的子程序
 ASTnode* ExtDefList() {
     if (w == EOF) return NULL;
-    root = AST_mknode(); //生成外部定义序列结点root
+    root = AST_mknode(0, EXT_DEF_LIST, NULL, 0); //生成外部定义序列结点root
     AST_add_child(root, ExtDef());   //处理一个外部定义得到子树，作为root
     AST_add_child(root, ExtDefList()); //作为root的第二颗子树
     return root;
@@ -191,41 +191,44 @@ ExtVarDef() {
         if (w != ID) {error(row, col, "外部变量定义-非标识符\n"); AST_clear(root); return NULL;}//报错，释放root为根的全部结点
         ASTnode* q = AST_new_child(p, AST_mknode(0, EXTVAR, NULL, 0));//生成外部变量序列结点，根指针为q,作为p的第二个孩子
         p = q;
-        AST_new_child(p, AST_make_node(1, ID, token_text0, 1)); //根据token_text的变量名生成一个变量结点，作为p的第一个孩子
+        AST_new_child(p, AST_mknode(1, ID, token_text0, 1)); //根据token_text的变量名生成一个变量结点，作为p的第一个孩子
         w = gettoken(); //期待得到一个逗号/分号
     }
 }
 
 //语法单位<函数定义>子程序
-funDef() {
-    ASTnode* root = AST_init();
-    AST_new_child(root, /*类型说明符*/,); //生成返回值类型结点，作为root第一个孩子
-    //调用形参子程序，生成第二棵子树
-    //得到函数体子树，如果是函数声明（以分号结尾）就为空，生成第三棵子树
+funcDef() {
+    ASTnode* root = AST_mknode(0, FUNC_DEF, token_text0, 1);
+    AST_add_child(root, AST_mknode(1, token_type, NULL, 0); //生成返回值类型结点，作为root第一个孩子
+    AST_add_child(root, formalPara()); //调用形参子程序，生成第二棵子树
+    AST_add_child(root, funcBody()); //得到函数体子树，如果是函数声明（以分号结尾）就为空，生成第三棵子树
     retrun root;
 }
 
 //语法单位<形参>子程序
 formalPara() {
-    ASTnode* root = AST_init(); //生成形参定义结点
+    ASTnode* root = AST_mknode(0, FORMAL_PARA, NULL, 0); //生成形参定义结点
     ASTnode* p = root;
     w = gettoken(); //读取一个类型名
+    if (w == ')') {w = gettoken(); retrun root;} //没有形参
     while (1) {
-        if (w != ',' || w != ')') {error(row, col, "形参-序列错误\n"); return NULL}//报错，释放root为根的全部结点，空指针返回
-        if (w == ')') {
+        if (w != INT && w!= FLOAT && w != CHAR) {error(row, col, "形参-类型错误\n"); return NULL}//报错，释放root为根的全部结点，空指针返回
+        AST_add_child(p, AST_mknode(1, w, NULL, 0));
+        w = gettoken();
+        if (w != ID) {error(row, col, "形参-非标识符\n"); AST_clear(root); return NULL;}//报错，释放root为根的全部结点
+        AST_add_child(p, AST_mknode(1, ID, token_text, 1));
+        w = gettoken();
+        ASTnode* q = AST_add_child(p, AST_mknode(0, FORMAL_PARA, NULL, 0));//生成外部变量序列结点，根指针为q,作为p的第二个孩子
+        p = q;
+        if (w != ',' && w != ')') {error(row, col, "形参-格式错误\n"; AST_clear(root); return NULL;)}
+        if (w == ')') { //形参结束了
             w = gettoken();
             return root; //返回根节点
         }
-        w = gettoken();
-        if (w != ID) {error(row, col, "形参-非标识符\n"); AST_clear(root); return NULL;}//报错，释放root为根的全部结点
-        ASTnode* q = AST_new_child(p, /**/, /**/);//生成外部变量序列结点，根指针为q,作为p的第二个孩子
-        p = q;
-        AST_new_child(p, /**/, /**/)//根据token_text的变量名生成一个变量结点，作为p的第一个孩子
-        w = gettoken(); //期待得到一个逗号/分号
+        w = gettoken(); //如果为逗号就再读取下一个
     }
 }
 
-}
 //语法单位<复合语句>子程序
 
 //语法单位<语句序列>子程序
