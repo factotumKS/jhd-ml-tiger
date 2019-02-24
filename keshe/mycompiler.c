@@ -1,22 +1,25 @@
 #include<stdio.h>
 #define IDLEN 32
+#define w_is_operand w==ID||w==INT_CONST||w==FLOAT_CONST||w==CHAR_CONST
+#define w_is_operator w>=ADD&&w<=ASSIGN
 
 enum token_kind { //词法分析返回的token种类
     //词法分析得到的token
     INT, FLOAT, CHAR, IF, ELSE, DO, WHILE, FOR, CONTINUE, BREAK, //10关键字
     ERROR_TOKEN, ID, INT_CONST, FLOAT_CONST, 
-    ADD, SUB, MUL, DIV, MOD, EQ, NEQ, ASSIGN, AND, OR,
+    ADD, SUB, MUL, DIV, MOD, GT, LT, GE, LE, EQ, NEQ, ASSIGN, AND, OR,
     LP, RP, LC, RC, COMMA, SEMI, RETURN,
     //语法分析中需要使用的内部结点标识
     PROGRAM, EXT_DEF_LIST, EXT_VAR_DEF, EXT_VAR, FUNC_DEF,
-    STATEMENT_BLOCK, STATEMENT_LIST,
+    STATEMENT_BLOCK, STATEMENT_LIST, 
+    EXPRESSION
     //栈结构中需要的起止符
-    SS,
+    SS
 };
 char* TYPE[] = {
     "int", "float", "char", "if", "else", "do", "while", "for", "continue", "break",
     "error_token", "id", "int_const", "float_const",
-    "+", "-", "*", "/", "%", "==", "!=", "=", "&&", "||",
+    "+", "-", "*", "/", "%", ">", "<", ">=", "<=", "==", "!=", "=", "&&", "||",
     "(", ")", "{", "}", ",", ";", "return",
 };
 typedef struct node{
@@ -26,25 +29,55 @@ typedef struct node{
     struct node* brother = NULL;      //弟结点
     struct node* child = NULL;        //子结点
 } ASTnode;
-typedef struct pNstack{ //栈结构含有一个top指针和bottom
-    layer* top = NULL;
-    layer* bottom = NULL;
+typedef struct chain{
+    ASTnode* content;
+    struct chain* pre;
+    struct chain* next;
 } stack;
-typedef struct stacklayer{ //栈结构的层之间形成一个链表
-    int content = 0;
-    struct stacklayer* next = NULL;
-    struct stacklayer* pre = NULL;
-} layer;
+char precede[][] ={
+    //+    -    *    /    (    )    =  >或< 等不等 起止符
+    {'>', '>', '<', '<', '<', '>', ' ', '>', '>', '>'}, // +
+    {'>', '>', '<', '<', '<', '>', ' ', '>', '>', '>'}, // -
+    {'>', '>', '>', '>', '<', '>', ' ', '>', '>', '>'}, // *
+    {'>', '>', '>', '>', '<', '>', ' ', '>', '>', '>'}, // /
+    {'<', '<', '<', '<', '<', '=', ' ', '>', '>', '>'}, // (
+    {'>', '>', '>', '>', '>', ' ', ' ', '>', '>', '>'}, // )
+    {'<', '<', '<', '<', '<', ' ', '<', '<', '<', '>'}, // =
+    {'<', '<', '<', '<', '<', '>', ' ', '>', '>', '>'}, // >或<
+    {'<', '<', '<', '<', '<', '>', ' ', '<', '>', '>'}, // 等不等
+    {'<', '<', '<', '<', '<', ' ', '<', '<', '<', '='}, // 起止符
+};
+int w2precede(int tk) { //将操作符转化为行列号
+    int num;
+    switch (tk) {
+        case ADD : return 0;
+        case SUB : return 1;
+        case MUL : return 2;
+        case DIV : return 3;
+        case LP  : return 4;
+        case RP  : return 5;
+        case ASSIGN: return 6;
+        case GT  : return 7
+        case LT  : return 7
+        case EQ  : return 8;
+        case NEQ : return 8;
+        case SS  : return 9;
+        default : 
+            printf("表达式错误\n");
+            return -1;
+    }
+}
 
 //初始化一堆用于保存字符串和数字常量的空间
-
 FILE* fp; //源文件指针
 int w; //表示刚返回得到的类型
 int row, col; //用于报错的行列号
-char token_text[IDLEN]; //储存文本信息的text
-char token_text0[IDLEN]; //变量名
-int token_name; //token的名字，用于变量中的类型名
-float token_float; 
+//临时保存用，生成ASTnode时会动态分配空间并将内容转移
+char token_text[IDLEN]; //gettoken之后，上一个标识符的text储存在这里
+char token_text0[IDLEN]; //处理定义语句时需要保留某些标识符的text，所以保存在这里
+int token_name; //处理定义语句时需要保存某些非标识符token的值，所以用int表示
+int token_int; //gettoken之后，上一个整数常量的大小储存在这里
+float token_float; //gettoken之后，上一个浮点数的大小储存在这里
 
 //预处理器-------------------------------------------------------
 prepare() {
@@ -119,9 +152,9 @@ ASTnode* AST_mknode(int gtype, int gname, void* gtext, int gdata) {
     return root;
 }
 
-//制作新text位置
+//制作新text位置，动态分配空间并将临时得到的空间转移过来
 void* AST_mktext(void* gtext, int gdata) {
-    if (gdata == 0) return NULL
+    if (gdata == 0) return NULL;
     else if (gdata == 1) { //复制字符串
         char* new = malloc(sizeof(strlen(gtext)) + 1);
         strcpy(new, gtext);
@@ -154,30 +187,36 @@ void AST_clear(ASTnode* root) {
     free(root);
 }
 
-//数据结构：栈---------------------------------------------------
+//数据结构：结点栈-------------------------------------------------
 //初始化一个栈，传入需要的值
-layer* Stack_init() { //用链表表示，第一个结点作为底部不保存
-    layer* top = NULL;
-    return top;
+stack* Astack_init() { //用链表表示，第一个结点作为底部不保存
+    return NULL;
 }
 
 //将一个给定元素入给定栈
-void Stack_push(layer** t, int i) {
-    layer* new = malloc(sizeof(layer));
-    new->content = i;
-    new->pre = (*t);
-    (*t)->next = new;
+void push(stack** s, ASTnode* i) {
+    stack* newc = malloc(sizeof(chain));
+    ASTnode* newn = malloc(sizeof(ASTnode));
+    newc->content = newn;
+    newc->next = NULL;
+    newc->pre = *s;
+    *s = newc//修改栈顶
 }
 
 //从一个给定栈返回栈顶元素
-int Stack_pop(layer** t) {
-    if (*t == NULL) {printf("栈下溢\n"); return -1;}
-    layer* p = (*t); //保存要释放的层
-    int pc = p->content; //保存要弹出的元素
-    *t = p->pre; //修改栈顶指针
-    if(*t) (*t)->next = NULL; //如果不是空栈，就修改新的栈顶指针
-    free(p); //释放顶层
-    return pc;
+int pop(stack** s, ASTnode** p) {
+    if (*s == NULL) return 0; //表示到达栈下溢
+    *p = (*s)->content; //将弹出的ASTnode放入容器的地址
+    *s = (*s)->pre; //表示栈顶指针往之前退一位
+    free((*s)->next); //释放旧的栈顶锁链
+    (*s)->next = NULL; //到这里完成新栈顶的设置
+    return 1; //表示弹出成功
+}
+
+//取得一个栈的栈顶元素，这里返回的是ASTnode
+ASTnode* gettop(stack* s) {
+    if(s == NULL) return NULL;
+    return s->content;
 }
 
 //递归性质的全部释放
@@ -347,34 +386,39 @@ ASTnode* statement() {
 //语法单位<表达式>子程序
 ASTnode* expression(int endsym) { //传入结束符号，可以是反小括号或者分号
     //已经读入了一个单词在w中
-    layer* op = Stack_init(); //定义运算符栈op并初始化，
-    Stack_push(&op, SS); //将启止符#入栈
-    layer* opn = Stack_init(); //定义操作数栈opn，元素是结点的指针
-    //错误标记error设置为0
-    while ((w != /*#*/ || gettop(op) != /*#*/) && !error) { //运算符栈顶不是起止符号，并没有错误时
-        if(/*w是标识符或常数等操作数*/) {
-            //根据w生成一个结点，结点指针进栈opn
+    stack* op = Stack_init(); //定义运算符栈op并初始化，
+    push(op, AST_mknode(1, SS, NULL, 0)); //将启止符#入栈
+    stack* opn = Stack_init(); //定义操作数栈opn，元素是结点的指针
+    int error = 0; //错误标记error设置为0
+    ASTnode* t, t1, t2; //准备在下面用于拼接三个ASTnode
+    while ((w != SS || (gettop(op))->name != SS) && !error) { //运算符栈顶不是起止符号，并没有错误时
+        if(w == ID) { //如果是标识符
+            push(&opn, AST_mknode(1, ID, token_text, 1)); //根据w生成一个结点，结点指针进栈opn
             w = gettoken();
         }
-        else if (/*w是运算符*/)
-        switch (precede[gettop(op)][w]) {
-                case '<' : push(oop, w); w = gettop(); break;
-                case '=' : if(!pop(op, t)); error++; w = gettoken(); break; //去括号
-                case '>' : if(!pop(opn, t2)); error++;
-                           if(!pop(opn, t1)); error++;
-                           if(!pop(opn, t)); error+;
-                           //根据运算符栈退栈得到的运算符t和操作数的结点指针t1,t2
-                           //完成建立一个运算符的结点，结点指针进栈opn
-                           break;
-                default : if(w == endsym) w = BEGIN_END; //遇到结束标记分号,w被替换成为#
-                        else error=1;
+        else if (w == INT_CONST) { //如果是整数常量
+            push(&opn, AST_mknode(1, INT_CONST, token_int, 2)); 
+            w = gettoken();
         }
-        else if (w == endsym) w = BEGIN_END; //遇到结束标记分号，w被替换成为#
+        else if (w_is_operator) //如果w是运算符
+            switch (precede[w2precede(gettop(op))][w2precede(w)]) {
+                    case '<' : push(&op, AST_mknode(1, w, NULL, 0)); w = gettoken(); break;
+                    case '=' : if(!pop(&op, &t)); error++; w = gettoken(); break; //去括号
+                    case '>' : if(!pop(&opn, &t2)); error++;
+                               if(!pop(&opn, &t1)); error++;
+                               if(!pop(&opn, &t)); error++;
+                               AST_add_child(t, t1); //根据运算符栈退栈得到的运算符t和操作数的结点指针t1,t2
+                               AST_add_child(t, t2); //完成建立一个运算符的结点，结点指针进栈opn
+                               push(&opn, t); break;
+                    default : if(w == endsym) w = SS; //遇到结束标记分号,w被替换成为#
+                            else error = 1;
+            }
+        else if (w == endsym) w = SS; //遇到结束标记分号，w被替换成为#
         else error = 1;
     }
-    if (/*操作数栈只有一个结点指针*/ && gettop(op) == /*#*/ && /*没有错误*/)
-        return /*操作数栈唯一的这个结点指针*/ //成功返回表达式语法树的根结点指针
-    else return NULL;
+    if (opn->pre = NULL/*表示操作数栈只有一个元素*/ && gettop(op) == SS && !error)
+        return opn->content; /*返回操作数栈唯一的结点指针*/ //成功返回表达式语法树的根结点指针
+    else return NULL; //表达式分析出现了错误
 }
 
 //根据行列报错
