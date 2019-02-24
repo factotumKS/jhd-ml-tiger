@@ -2,13 +2,16 @@
 #define IDLEN 32
 
 enum token_kind { //词法分析返回的token种类
+    //词法分析得到的token
     INT, FLOAT, CHAR, IF, ELSE, DO, WHILE, FOR, CONTINUE, BREAK, //10关键字
     ERROR_TOKEN, ID, INT_CONST, FLOAT_CONST, 
     ADD, SUB, MUL, DIV, MOD, EQ, NEQ, ASSIGN, AND, OR,
-    LP, RP, LC, RC, COMMA, SEMI, RETURN;
-};
-enum node_kind{ //语法分析返回的node种类
+    LP, RP, LC, RC, COMMA, SEMI, RETURN,
+    //语法分析中需要使用的内部结点标识
     PROGRAM, EXT_DEF_LIST, EXT_VAR_DEF, EXT_VAR, FUNC_DEF,
+    STATEMENT_BLOCK, STATEMENT_LIST,
+    //栈结构中需要的起止符
+    SS,
 };
 char* TYPE[] = {
     "int", "float", "char", "if", "else", "do", "while", "for", "continue", "break",
@@ -23,6 +26,15 @@ typedef struct node{
     struct node* brother = NULL;      //弟结点
     struct node* child = NULL;        //子结点
 } ASTnode;
+typedef struct pNstack{ //栈结构含有一个top指针和bottom
+    layer* top = NULL;
+    layer* bottom = NULL;
+} stack;
+typedef struct stacklayer{ //栈结构的层之间形成一个链表
+    int content = 0;
+    struct stacklayer* next = NULL;
+    struct stacklayer* pre = NULL;
+} layer;
 
 //初始化一堆用于保存字符串和数字常量的空间
 
@@ -42,7 +54,7 @@ prepare() {
 }
 
 //语法分析------------------------------------------------------
-gettoken() {
+int gettoken() {
     char c;
     for(int i = 0; i < IDLEN; i++) token_text[i] = 0;
     
@@ -97,7 +109,7 @@ gettoken() {
 }
 
 
-//数据结构------------------------------------------------------
+//数据结构：AST-----------------------------------------------------
 //制作新结点    形参分别是结点类型，结点名，结点附带text位置，结点附带text类型
 ASTnode* AST_mknode(int gtype, int gname, void* gtext, int gdata) {
     ASTnode* root = malloc(sizeof(ASTnode));
@@ -142,12 +154,46 @@ void AST_clear(ASTnode* root) {
     free(root);
 }
 
+//数据结构：栈---------------------------------------------------
+//初始化一个栈，传入需要的值
+layer* Stack_init() { //用链表表示，第一个结点作为底部不保存
+    layer* top = NULL;
+    return top;
+}
+
+//将一个给定元素入给定栈
+void Stack_push(layer** t, int i) {
+    layer* new = malloc(sizeof(layer));
+    new->content = i;
+    new->pre = (*t);
+    (*t)->next = new;
+}
+
+//从一个给定栈返回栈顶元素
+int Stack_pop(layer** t) {
+    if (*t == NULL) {printf("栈下溢\n"); return -1;}
+    layer* p = (*t); //保存要释放的层
+    int pc = p->content; //保存要弹出的元素
+    *t = p->pre; //修改栈顶指针
+    if(*t) (*t)->next = NULL; //如果不是空栈，就修改新的栈顶指针
+    free(p); //释放顶层
+    return pc;
+}
+
+//递归性质的全部释放
+void Stack_clear(layer* t) {
+    if (t == NULL) return;
+    while(t->pre) Stack_clear(t->pre);
+    while(t->next)Stack_clear(t->next);
+    free(t); //释放掉当前所在结点
+}
+
 //语法分析------------------------------------------------------
 //语法单位<程序>的子程序
 ASTnode* program() {
-    ASTnode = root;
+    ASTnode* root = AST_mknode(0, PROGRAM, NULL, 0);
     w = gettoken();
-    if (root = ExtDefList())  return root;//语法正确返回语法树根节点
+    if (root->child = ExtDefList())  return root;//语法正确返回语法树根节点
     else //语法错误
 }
 
@@ -189,9 +235,9 @@ ASTnode* ExtVarDef() {
         }
         w = gettoken();
         if (w != ID) {printerror(row, col, "外部变量定义-非标识符\n"); AST_clear(root); return NULL;}//报错，释放root为根的全部结点
-        ASTnode* q = AST_new_child(p, AST_mknode(0, EXTVAR, NULL, 0));//生成外部变量序列结点，根指针为q,作为p的第二个孩子
+        ASTnode* q = AST_add_child(p, AST_mknode(0, EXTVAR, NULL, 0));//生成外部变量序列结点，根指针为q,作为p的第二个孩子
         p = q;
-        AST_new_child(p, AST_mknode(1, ID, token_text0, 1)); //根据token_text的变量名生成一个变量结点，作为p的第一个孩子
+        AST_add_child(p, AST_mknode(1, ID, token_text0, 1)); //根据token_text的变量名生成一个变量结点，作为p的第一个孩子
         w = gettoken(); //期待得到一个逗号/分号
     }
 }
@@ -241,26 +287,27 @@ ASTnode* statementBlock() {
     else {
         AST_add_child(root, NULL); //无局部变量说明，root的第一个孩子设置为空指针
     }
-    //调用处理语句序列子程序，返回子树根结点指针，作为root的第二个孩子
+    AST_add_child(root, statementList()); //调用处理语句序列子程序，返回子树根结点指针，作为root的第二个孩子
+    //上面结束了这里应该是一个反大括号，可能需要gettoken()
     if (w != '}'/*w不是反大括号*/) {
         //返回空指针，报错并释放结点
-        printerror(row, col, "");
+        printerror(row, col, "复合语句-不正常结束\n");
         return NULL;
     }
     w = gettoken();
-    //反机会符合语句的子树根指针
+    return root; //返回复合语句子树根指针
 }
 
 //语法单位<语句序列>子程序
 ASTnode* statementList() {
-    ASTnode* root = NULL;
-    //调用处理一条语句的子程序，返回其子树根指针r1;
-    if (r1 == NULL) //没有分析到一条语句,errors>0时处理错误
-        //否则表示语句序列已结束
-        //返回NULL
+    ASTnode* root = AST_mknode(0, STATEMENT_LIST, NULL, 0);
+    w = gettoken(); //读入一个字符
+    ASTnode* r1 = statement(); //调用处理一条语句的子程序，返回其子树根指针r1;
+    if (r1 == NULL) //erros>0的时候还需要处理错误
+        return NULL;
     else {
-        root->/*第一个孩子*/ = r1;
-        root->/*第二个孩子*/ = //递归地调用语句序列子程序后返回值
+        root->child = r1;
+        root->child->brother = statementList(); //递归地调用语句序列子程序后返回值
         return root;
     }
 }
@@ -275,10 +322,13 @@ ASTnode* statement() {
             //调用处理表达式的子程序（结束符号为反小括号）正确时得到条件表达式子树指针
             //调用处理一条语句的子程序，得到IF子句的子树指针
             if (w == ELSE) {
-
+                //调用处理一条语句的子程序，得到IF子句的子树根指针
+                //生成if-else结点，下挂条件，IF子句，ELSE子句，三棵子树
             }
-            else //生成IF结点，下挂条件，
+            else //生成IF结点，下挂条件，IF子句2棵子树
         case LC : //调用复合语句子程序，返回得到的子树指针
+            ASTnode* root = statementBlock(); //不需要提前传入符号
+            return root;
         case WHILE : //……
         case LP : //各种表达式语句，含有赋值，形式为表达式，以分号结束
         case ID : //……
@@ -290,15 +340,16 @@ ASTnode* statement() {
         case RC : //语句序列结束符号，如果语言支持switch语句，结束符号还有case和deafault
             w = gettoken();
             return NULL;
-        default errors += 1; //报错并返回NULL
+        default errors += 1; printerror(row, col, ""); return NULL; //报错并返回NULL
     }
 }
 
 //语法单位<表达式>子程序
 ASTnode* expression(int endsym) { //传入结束符号，可以是反小括号或者分号
     //已经读入了一个单词在w中
-    //定义运算符栈op并初始化，将启止符#入栈
-    //定义操作数栈opn，元素是结点的指针
+    layer* op = Stack_init(); //定义运算符栈op并初始化，
+    Stack_push(&op, SS); //将启止符#入栈
+    layer* opn = Stack_init(); //定义操作数栈opn，元素是结点的指针
     //错误标记error设置为0
     while ((w != /*#*/ || gettop(op) != /*#*/) && !error) { //运算符栈顶不是起止符号，并没有错误时
         if(/*w是标识符或常数等操作数*/) {
