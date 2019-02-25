@@ -1,3 +1,53 @@
+/*
+*   <程序> ::= <外部定义序列>
+*   <外部定义序列> ::= <外部定义> <外部定义序列>
+*                |   <外部定义>
+*   <外部定义> ::= <外部变量定义>
+*             |   <函数定义>
+*   <外部变量定义> ::= <类型说明符> <变量序列>
+*   <类型说明符> ::= int | float | char
+*   <变量序列> ::= <变量> , <变量序列>
+*             |   <变量> 
+*   <函数定义> ::= <类型说明符> <函数名> (<形式参数序列>) <复合语句>
+*   <形式参数序列> ::= <形式参数> , <形式参数序列>
+*             |   <空>
+*   <形式参数> ::= <类型说明符> 标识符
+*   <复合语句> ::= { <局部变量定义序列> <语句序列> }
+*   <局部变量定义序列> ::= <局部变量定义> <局部变量定义序列>
+*                   |   <空>
+*   <局部变量定义> ::= <类型说明符> <变量序列> ;
+*   <语句序列> ::= <语句> <语句序列>
+*             |   <空> 
+*   <语句> ::= <表达式> ; 
+*         |   if (<表达式>) <语句> else <语句>
+*         |   if (<表达式>) <语句>
+*         |   do <语句> ; while ( <表达式> )
+*         |   do <复合语句> while ( <表达式> )
+*         |   while (表达式) <语句> ;
+*         |   while (表达式) <复合语句>
+*         |   for ( <语句> ; <表达式> ; <语句> ) <语句> ;
+*         |   for ( <语句> ; <表达式> ; <语句> ) <复合语句>
+*         |   return <表达式> ; 
+*         |   <表达式> ; 
+*         |   continue ;
+*         |   break ;
+*   <表达式> ::= <表达式> + <表达式>
+*           |   <表达式> - <表达式>
+*           |   <表达式> * <表达式>
+*           |   INT_CONST
+*           |   IDENT
+*           |   IDENT ( <实参序列> )
+*           |   <表达式> == <表达式>
+*           |   <表达式> != <表达式>
+*           |   <表达式> > <表达式>
+*           |   <表达式> >= <表达式>
+*           |   <表达式> < <表达式>
+*           |   <表达式> <= <表达式>
+*           |   <表达式> = <表达式>
+*           |   <表达式> > <表达式>
+*   <实参序列> ::= <表达式> <实参序列>
+*             |   <空>
+*/
 #include<stdio.h>
 #define IDLEN 32
 #define w_is_operand w==ID||w==INT_CONST||w==FLOAT_CONST||w==CHAR_CONST
@@ -184,20 +234,25 @@ ASTnode* AST_mknode(int gtype, int gname, void* gtext, int gdata) {
 //制作新text位置，动态分配空间并将临时得到的空间转移过来
 void* AST_mktext(void* gtext, int gdata) {
     if (gdata == 0) return NULL;
-    else if (gdata == 1) { //复制字符串
+    else if (gdata == STRING) { //复制字符串
         char* new = malloc(sizeof(strlen(gtext)) + 1);
         strcpy(new, gtext);
         return new;
     }
-    else if (gdata == 2) { //复制整数
+    else if (gdata == INT) { //复制整数
         int* new = malloc(sizeof(int));
         *new = *gtext;
-        return new;
+        return new
     }
-    else { //复制浮点数
+    else if (gdata == FLOAT) { //复制浮点数
         float* new = malloc(sizeof(float));
         *new = *gtext;
-        return new;
+        return new
+    }
+    else { //复制字符串
+        char* new = malloc(sizeof(char));
+        *new = *gtext;
+        return new
     }
 }
 
@@ -434,7 +489,13 @@ ASTnode* statement() {
                 AST_add_child(r, r2); //if子句结点
                 return r;
             }
-        case LC : return statementBlock();//调用复合语句子程序，返回得到的子树指针
+        case LC : //调用复合语句子程序，返回得到的子树指针
+            AST* r = statementBlock(); 
+            //是否需要gettoken
+            return r;
+        case RC : //语句序列结束符号，如果语言支持switch语句，结束符号还有case和deafault
+            w = gettoken();
+            return NULL;
         case LP : return //各种表达式语句，含有赋值，形式为表达式，以分号结束
         case ID : //表达式语句，用于修改变量，会出现赋值，一般以分号结尾；然而for循环中要求以RP结尾
             expression();
@@ -482,13 +543,13 @@ ASTnode* statement() {
             if (w != SEMI) {printerror(); return NULL} //continue语句结束之后需要检查后面一个token是否为分号
             return r;
         case RETURN : //return语句中可能有人还想搞事情，可以接函数调用
+            ASTnode* r = AST_mknode(0, RETURN, NULL, 0);
+            AST_add_child(r, expression()); //将表达式语句作为return结点的第一棵也是唯一一棵子树
+            return r;
         case INT : //声明语句
         case CHAR : //同上
         case FLOAT : //同上
             return LocVarDef(); //处理局部定义语句
-        case RC : //语句序列结束符号，如果语言支持switch语句，结束符号还有case和deafault
-            w = gettoken();
-            return NULL;
         default errors += 1; printerror(row, col, ""); return NULL; //报错并返回NULL
     }
 }
