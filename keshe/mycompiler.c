@@ -75,8 +75,9 @@ int row, col; //用于报错的行列号
 char token_text[IDLEN]; //gettoken之后，上一个标识符的text储存在这里
 char token_text0[IDLEN]; //处理定义语句时需要保留某些标识符的text，所以保存在这里
 int token_name; //处理定义语句时需要保存某些非标识符token的值，表达式结尾时也需要保存结束符号到底是谁？！
-int token_int; //gettoken之后，上一个整数常量的大小储存在这里
-float token_float; //gettoken之后，上一个浮点数的大小储存在这里
+int token_int; //gettoken之后，上一个（正）整数常量的大小储存在这里
+float token_float; //gettoken之后，上一个浮点数常量的大小储存在这里
+char token_char; //gettoken之后哦，上一个字符常量的大小储存在这里
 
 //预处理器-------------------------------------------------------
 prepare() {
@@ -139,9 +140,12 @@ int gettoken() {
         }
     }
  
-    //处理浮点数float
-
     //处理字符char
+    if (c = '\'') { //字符常量
+        token_char = fgetc(c);
+        c = fgetc(fp); //消化掉后面的引号
+        return CHAR_CONST;
+    }
 
     //处理各种符号
     switch (c) {
