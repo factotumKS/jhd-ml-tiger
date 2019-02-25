@@ -85,7 +85,7 @@ prepare() {
     //返回文件指针
 }
 
-//语法分析------------------------------------------------------
+//语法分析，每次调用得到一个token，返回名字并将附带text保存在token_text、token_int等全局变量中-
 int gettoken() {
     char c;
     for(int i = 0; i < IDLEN; i++) token_text[i] = 0;
@@ -108,13 +108,40 @@ int gettoken() {
         return ID; //返回标识符
     }
 
-    //处理整数
-    if (c == '-' || (c>='0' && c<='9')) {
-        do {token_text[i] = c; i++; col += 1;}
-        while ((c = fgetc(fp)) && (c>='0' && c <='9'))
-        ungetc(c, fp);
-        return INT_CONST;
+    //处理整数int，浮点数float
+    if (c >= '0' && c <= '9') {
+        int token_val = token - '0';
+        if (token_val > 0) { //十进制数
+            while ((c = fgetc(fp)) &&  c >= '0' && c <= '9') {
+                token_val = token_val * 10 + c - '0';
+            }
+            if (c == '.') { //浮点数，不考虑负数，不考虑e和E的科学技术法格式
+                float token_val0 = 0;
+                while ((c = fgetc(fp)) && c >= '0' && c <= '9') {
+                    token_val = token_val / 10 + c - '0';
+                }
+                token_float = token_val + token_val0;
+                return FLOAT_CONST;
+            }
+            token_int = token_val; return INT_CONST;
+        } 
+        else if ((c = fgetc(fp)) && (c == 'x' || *src == 'X')) { //十六进制数
+            while ((c = fgetc(fp)) && ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
+                token_val = token_val * 16 + (c & 15) + (c >= 'A' ? 9 : 0);
+            }
+            token_int = token_val; return INT_CONST;
+        }
+        else { //八进制数，或者0
+            while ((c = fgetc(fp)) && c >= '0' && c <= '7') {
+                token_val = token_val * 8 + c - '0';
+            }
+            token_int = token_val; return INT_CONST;
+        }
     }
+ 
+    //处理浮点数float
+
+    //处理字符char
 
     //处理各种符号
     switch (c) {
@@ -304,7 +331,7 @@ ASTnode* LocVarDef() {
         p = q;
         w = gettoken();//下一个token应该是标识符，否则在上面报错
     }
-    
+
 }
 
 //！！！语法单位<函数定义>子程序————不需要提前读取token
@@ -405,7 +432,8 @@ ASTnode* statement() {
             }
         case LC : return statementBlock();//调用复合语句子程序，返回得到的子树指针
         case LP : return //各种表达式语句，含有赋值，形式为表达式，以分号结束
-        case ID : //表达式语句
+        case ID : //表达式语句，用于修改变量，会出现赋值，一般以分号结尾；然而for循环中要求以RP结尾
+            expression();
         case DO : //分析do-while语句（实验不要求）
             ASTnode* r1 = statement(SEMI); //得到do子句
             w = gettoken();
@@ -453,7 +481,7 @@ ASTnode* statement() {
         case INT : //声明语句
         case CHAR : //同上
         case FLOAT : //同上
-            //处理声明语句，定义语句的子程序
+            return LocVarDef(); //处理局部定义语句
         case INT_CONST :
             //调用表达式处理子程序（结束符号为分号）
             //正确时
@@ -496,7 +524,7 @@ ASTnode* expression(int end1, int end2) { //传入结束符号，可以是反小
                     default : if(w == end1 || w == end2) w = SS; //遇到结束标记分号,w被替换成为#
                             else error = 1;
             }
-        else if (w == end1 || w == end2) {token_name = w; w = SS;} //遇到结束标记分号，w被替换成为#
+        else if (w == end1 || w == end2) {token_name = w; w = SS;} //遇到结束标记分号，w被替换成为#，此外将导致终止的token写入token_name
         else error = 1;
     }
     if (opn->pre = NULL/*表示操作数栈只有一个元素*/ && gettop(op) == SS && !error)
@@ -510,6 +538,11 @@ void printerror(int row, int col, char* errortype) {
 }
 
 //语法树显示---------------------------------------------------
-
+void AST_show(ASTnode* r) { //输出解析出的语法树
+    
+}
 
 //美化格式-----------------------------------------------------
+void AST_modify(ASTnode* r) { //调整解析出的语法树
+
+}
