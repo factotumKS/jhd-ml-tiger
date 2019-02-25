@@ -76,9 +76,8 @@ char* TYPE[] = {
     "(", ")", "{", "}", ",", ";", "return",
 };
 typedef struct node{
-    int type = 0;   //表示词法分析或语法分析结点
     int name = 0;   //表示名字
-    void* t = NULL;  //表示内容
+    void* text = NULL;  //表示内容
     struct node* brother = NULL;      //弟结点
     struct node* child = NULL;        //子结点
 } ASTnode;
@@ -159,7 +158,7 @@ int gettoken() {
         for (int i = 0; i < 10; i++) {  //判断是否为关键字
             if (!strcmp(token_text, TYPE[i])) return i;
         }
-        return ID; //返回标识符
+        return IDENT; //返回标识符
     }
 
     //处理整数int，浮点数float
@@ -226,10 +225,9 @@ int gettoken() {
 
 //数据结构：AST-----------------------------------------------------
 //制作新结点    形参分别是结点类型，结点名，结点附带text位置，结点附带text类型
-ASTnode* AST_mknode(int gtype, int gname, void* gtext, int gdata) {
+ASTnode* AST_mknode(int gname, void* gtext, int gdata) {
     ASTnode* root = malloc(sizeof(ASTnode));
     root->name = gname;
-    root->type = gtype;
     root->text = AST_mktext(gtext, gdata);
     return root;
 }
@@ -237,7 +235,7 @@ ASTnode* AST_mknode(int gtype, int gname, void* gtext, int gdata) {
 //制作新text位置，动态分配空间并将临时得到的空间转移过来
 void* AST_mktext(void* gtext, int gdata) {
     if (gdata == 0) return NULL;
-    else if (gdata == STRING) { //复制字符串
+    else if (gdata == STRING) { //复制字符串 ID
         char* new = malloc(sizeof(strlen(gtext)) + 1);
         strcpy(new, gtext);
         return new;
@@ -326,7 +324,7 @@ ASTnode* program() {
 //！！！语法单位<外部定义序列>的子程序
 ASTnode* ExtDefList() {
     if (w == EOF) return NULL;
-    root = AST_mknode(0, EXT_DEF_LIST, NULL, 0); //生成外部定义序列结点root
+    root = AST_mknode(EXT_DEF_LIST, NULL, 0); //生成外部定义序列结点root
     AST_add_child(root, ExtDef());   //处理一个外部定义得到子树，作为root
     AST_add_child(root, ExtDefList()); //作为root的第二颗子树
     return root;
@@ -337,7 +335,7 @@ ASTnode* ExtDef() { //处理外部定义序列，正确时返回子树根节点�
     if (w != INT && w != FLOAT && w != CHAR) {printerror(row, col, "外部定义-类型错误\n"); return NULL;}
     token_name = w; //保存类型说明符
     w = gettoken();
-    if (w != ID) {printerror(row, col, "外部定义-标识符错误\n"); return NULL;}
+    if (w != IDENT) {printerror(row, col, "外部定义-标识符错误\n"); return NULL;}
     strcpy(token_text0, token_text); //保存第一个变量名或函数名到token_text0
     w = gettoken();
     if (w != LP) p = ExtVar(); //调用外部变量定义子程序
@@ -347,11 +345,11 @@ ASTnode* ExtDef() { //处理外部定义序列，正确时返回子树根节点�
 
 //！!!语法单位<外部变量定义>子程序————不需要提前读取token
 ASTnode* ExtVarDef() {
-    ASTnode* r = AST_mknode(0, EXT_VAR_DEF, NULL, 0); //生成外部变量定义结点
-    AST_add_child(r, AST_mknode(1, token_name, NULL, 0)); //根据读入外部变量的类型生成结点,作为root第一个孩子
-    ASTnode* p = AST_mknode(0, EXTVAR, NULL, 0); //生成外部变量序列结点,
+    ASTnode* r = AST_mknode(EXT_VAR_DEF, NULL, 0); //生成外部变量定义结点
+    AST_add_child(r, AST_mknode(token_name, NULL, 0)); //根据读入外部变量的类型生成结点,作为root第一个孩子
+    ASTnode* p = AST_mknode(EXTVAR, NULL, 0); //生成外部变量序列结点,
     AST_add_child(r, p); //p作为root第二个孩子
-    AST_add_child(p, AST_mknode(1, ID, token_text0, 1)); //由保存在token_text0的第一个变量名生成第一个变量名结点
+    AST_add_child(p, AST_mknode(IDENT, token_text0, STRING)); //由保存在token_text0的第一个变量名生成第一个变量名结点
     w = gettoken();
     while (1) {
         if (w != ',' || w != ';') {printerror(row, col, "外部变量定义-格式错误\n"); AST_clear(root); return NULL}//报错，释放root为根的全部结点，空指针返回
@@ -361,26 +359,26 @@ ASTnode* ExtVarDef() {
         }
         w = gettoken();
         if (w != ID) {printerror(row, col, "外部变量定义-非标识符\n"); AST_clear(root); return NULL;}//报错，释放root为根的全部结点
-        ASTnode* q = AST_add_child(p, AST_mknode(0, EXTVAR, NULL, 0));//生成外部变量序列结点，根指针为q,作为p的第二个孩子
+        ASTnode* q = AST_add_child(p, AST_mknode(EXTVAR, NULL, 0));//生成外部变量序列结点，根指针为q,作为p的第二个孩子
         p = q;
-        AST_add_child(p, AST_mknode(1, ID, token_text0, 1)); //根据token_text的变量名生成一个变量结点，作为p的第一个孩子
+        AST_add_child(p, AST_mknode(IDENT, token_text0, STRING)); //根据token_text的变量名生成一个变量结点，作为p的第一个孩子
         w = gettoken(); //期待得到一个逗号/分号
     }
 }
 
 //语法单位<局部变量定义>子程序————不需要提前读取token
 ASTnode* LocVarDef() {
-    ASTnode* r = AST_mknode(0, LOC_VAR_DEF, NULL, 0); //生成局部变量定义结点
-    AST_add_child(r, AST_mknode(1, token_name, NULL, 0)); //根据读入外部变量的类型生成结点,作为root第一个孩子
-    ASTnode* p = AST_mknode(0, LOC_VAR_LIST, NULL, 0); //生成局部变量序列结点,
+    ASTnode* r = AST_mknode(LOC_VAR_DEF, NULL, 0); //生成局部变量定义结点
+    AST_add_child(r, AST_mknode(token_name, NULL, 0)); //根据读入外部变量的类型生成结点,作为root第一个孩子
+    ASTnode* p = AST_mknode(LOC_VAR_LIST, NULL, 0); //生成局部变量序列结点,
     AST_add_child(r, p); //p作为root第二个孩子
-    AST_add_child(p, AST_mknode(1, ID, token_text0, 1)); //由保存在token_text0的第一个变量名生成第一个变量名结点
+    AST_add_child(p, AST_mknode(IDENT, token_text0, STRING)); //由保存在token_text0的第一个变量名生成第一个变量名结点
     w = gettoken();
     while(1) {
-        if (w != ID) {/*报错*/ return NULL;}
-        ASTnode* v = AST_mknode(p, LOC_VAR, NULL, 0);
+        if (w != IDENT) {/*报错*/ return NULL;}
+        ASTnode* v = AST_mknode(LOC_VAR, NULL, 0);
         AST_add_child(p, v); //局部变量结点v作为局部变量序列结点p的第一棵子树
-        AST_add_child(v, AST_mknode(1, ID, token_text, 1); //标识符作为局部变量结点v的第一棵子树
+        AST_add_child(v, AST_mknode(IDENT, token_text, STRING); //标识符作为局部变量结点v的第一棵子树
         w = gettoken();
         if (w == EQ) { //需要解析一个表达式
             w = gettoken();
@@ -388,7 +386,7 @@ ASTnode* LocVarDef() {
             if (token_name == SEMI) {w = gettoken(); return r;} //分号结束代表着程序的结束
             if (token_name != COMMA) {printerror(); return NULL} //出错
         }
-        ASTnode* q = AST_mknode(0, LOC_VAR_LIST, NULL, 0); //创建下一个结点
+        ASTnode* q = AST_mknode(LOC_VAR_LIST, NULL, 0); //创建下一个结点
         AST_add_child(p, q); //作为局部变量结点p的第三个结点
         p = q;
         w = gettoken();//下一个token应该是标识符，否则在上面报错
@@ -398,8 +396,8 @@ ASTnode* LocVarDef() {
 
 //！！！语法单位<函数定义>子程序————不需要提前读取token
 ASTnode* funcDef() {
-    ASTnode* root = AST_mknode(0, FUNC_DEF, token_text0, 1);
-    AST_add_child(root, AST_mknode(1, token_name, NULL, 0); //生成返回值类型结点，作为root第一个孩子
+    ASTnode* root = AST_mknode(FUNC_DEF, token_text0, STRING);
+    AST_add_child(root, AST_mknode(token_name, NULL, 0); //生成返回值类型结点，作为root第一个孩子
     AST_add_child(root, formalPara()); //调用形参子程序，生成第二棵子树
     if (w == ';') {AST_add_child(root, NULL); return root}
     else if (w == '{') {AST_add_child(root, funcBody()); return root;} //得到函数体子树，如果是函数声明（以分号结尾）就为空，生成第三棵子树
@@ -408,18 +406,18 @@ ASTnode* funcDef() {
 
 //！！！语法单位<形参>子程序————不需要提前读取token
 ASTnode* formalPara() {
-    ASTnode* root = AST_mknode(0, FORMAL_PARA, NULL, 0); //生成形参定义结点
+    ASTnode* root = AST_mknode(FORMAL_PARA, NULL, 0); //生成形参定义结点
     ASTnode* p = root;
     w = gettoken(); //读取一个类型名
     if (w == ')') {w = gettoken(); retrun root;} //没有形参
     while (1) {
         if (w != INT && w!= FLOAT && w != CHAR) {printerror(row, col, "形参-类型错误\n"); return NULL}//报错，释放root为根的全部结点，空指针返回
-        AST_add_child(p, AST_mknode(1, w, NULL, 0));
+        AST_add_child(p, AST_mknode(w, NULL, 0));
         w = gettoken();
-        if (w != ID) {printerror(row, col, "形参-非标识符\n"); AST_clear(root); return NULL;}//报错，释放root为根的全部结点
-        AST_add_child(p, AST_mknode(1, ID, token_text, 1));
+        if (w != IDENT) {printerror(row, col, "形参-非标识符\n"); AST_clear(root); return NULL;}//报错，释放root为根的全部结点
+        AST_add_child(p, AST_mknode(IDENT, token_text, STRING));
         w = gettoken();
-        ASTnode* q = AST_add_child(p, AST_mknode(0, FORMAL_PARA, NULL, 0));//生成外部变量序列结点，根指针为q,作为p的第二个孩子
+        ASTnode* q = AST_add_child(p, AST_mknode(FORMAL_PARA, NULL, 0));//生成外部变量序列结点，根指针为q,作为p的第二个孩子
         p = q;
         if (w != ',' && w != ')') {printerror(row, col, "形参-格式错误\n"; AST_clear(root); return NULL;)}
         if (w == ')') { //形参结束了
@@ -432,7 +430,7 @@ ASTnode* formalPara() {
 
 //语法单位<复合语句>子程序————不需要提前读取
 ASTnode* statementBlock() {
-    ASTnode* root = AST_mknode(0, STATEMENT_BLOCK, NULL, 0);
+    ASTnode* root = AST_mknode(STATEMENT_BLOCK, NULL, 0);
     w = gettoken();
     if (w == INT || w == FLOAT || w == CHAR) {
         token_name = w; //准备调用下面的程序
@@ -454,7 +452,7 @@ ASTnode* statementBlock() {
 
 //语法单位<语句序列>子程序————不需要提前读取token
 ASTnode* statementList() {
-    ASTnode* root = AST_mknode(0, STATEMENT_LIST, NULL, 0);
+    ASTnode* root = AST_mknode(STATEMENT_LIST, NULL, 0);
     w = gettoken(); //读入一个字符
     ASTnode* r1 = statement(SEMI); //调用处理一条语句的子程序，返回其子树根指针r1;
     if (r1 == NULL) //erros>0的时候还需要处理错误
@@ -480,14 +478,14 @@ ASTnode* statement() {
             ASTnode* r2 = statement(); //调用处理一条语句的子程序，得到IF子句的子树指针
             if (w == ELSE) {
                 ASTnode* r3 = statement(); //调用处理一条语句的子程序，得到IF子句的子树根指针
-                ASTnode* r = AST_mknode(0, IF_ELSE, NULL, 0); //生成if-else结点
+                ASTnode* r = AST_mknode(IF_ELSE, NULL, 0); //生成if-else结点
                 AST_add_child(r, r1); //下挂条件结点
                 AST_add_child(r, r2); //if子句结点
                 AST_add_child(r, r3); //else子句结点
                 return r;
             }
             else { 
-                ASTnode* r = AST_mknode(0, IF, NULL, 0); //生成if-else结点
+                ASTnode* r = AST_mknode(IF, NULL, 0); //生成if-else结点
                 AST_add_child(r, r1); //下挂条件结点
                 AST_add_child(r, r2); //if子句结点
                 return r;
@@ -509,7 +507,7 @@ ASTnode* statement() {
             w = gettoken();
             if (w != LP) {printerror(); return NULL}
             ASTnode* r2 = expression(RP, RP);
-            ASTnode* r = AST_mknode(0, DO_WHILE, NULL, 0);
+            ASTnode* r = AST_mknode(DO_WHILE, NULL, 0);
             AST_add_child(r, r1); //添加do子句
             AST_add_child(r, r2); //添加循环条件
             return r;
@@ -518,7 +516,7 @@ ASTnode* statement() {
             if (w != LP) {printerror(); return NULL}
             ASTnode* r1 = expression(RP, RP); //调用处理表达式的子程序（结束符号为反小括号）正确时得到条件表达式子树指针
             ASTnode* r2 = statement(); //调用处理一条语句的子程序，得到while循环体的子树指针
-            ASTnode* r = AST_mknode(0, WHILE, NULL, 0);
+            ASTnode* r = AST_mknode(WHILE, NULL, 0);
             AST_add_child(r, r1); //添加循环条件
             AST_add_child(r, r2); //添加while循环体
             return r;
@@ -529,24 +527,24 @@ ASTnode* statement() {
             ASTnode* r2 = expression(RP, RP); //调用条件子程序得到循环条件子树指针
             ASTnode* r3 = /*按照右小括号而不是分号结尾*/; //调用语句子程度得到循环结束的变化部分
             ASTnode* r4 = statement(); //调用语句子程序得到循环结束的变化部分
-            ASTnode* r = AST_mknode(0, FOR, NULL, 0);
+            ASTnode* r = AST_mknode(FOR, NULL, 0);
             AST_add_child(r, r1); //添加初始部分子树语句  
             AST_add_child(r, r2); //添加循环条件子树语句              
             AST_add_child(r, r3); //添加补充条件子树语句
             AST_add_child(r, r4); //添加循环部分子树语句
             return r;
         case BREAK : //break关键字单独成一条语句
-            ASTnode* r = AST_mknode(1, BREAK, NULL, 0);
+            ASTnode* r = AST_mknode(BREAK, NULL, 0);
             w = gettoken();
             if (w != SEMI) {printerror(); return NULL} //break语句结束之后需要检查后面一个token是否为分号
             return r;
         case CONTINUE : //continue关键字单独成一条语句
-            ASTnode* r = AST_mknode(1, CONTINUE, NULL, 0);
+            ASTnode* r = AST_mknode(CONTINUE, NULL, 0);
             w = gettoken();
             if (w != SEMI) {printerror(); return NULL} //continue语句结束之后需要检查后面一个token是否为分号
             return r;
         case RETURN : //return语句中可能有人还想搞事情，可以接函数调用
-            ASTnode* r = AST_mknode(0, RETURN, NULL, 0);
+            ASTnode* r = AST_mknode(RETURN, NULL, 0);
             AST_add_child(r, expression()); //将表达式语句作为return结点的第一棵也是唯一一棵子树
             return r;
         case INT : //声明语句
@@ -561,22 +559,22 @@ ASTnode* statement() {
 ASTnode* expression(int end1, int end2) { //传入结束符号，可以是反小括号或者分号
     //已经读入了一个单词在w中
     stack* op = Stack_init(); //定义运算符栈op并初始化，
-    push(op, AST_mknode(1, SS, NULL, 0)); //将启止符#入栈
+    push(op, AST_mknode(SS, NULL, 0)); //将启止符#入栈
     stack* opn = Stack_init(); //定义操作数栈opn，元素是结点的指针
     int error = 0; //错误标记error设置为0
     ASTnode* t, t1, t2; //准备在下面用于拼接三个ASTnode
     while ((w != SS || (gettop(op))->name != SS) && !error) { //运算符栈顶不是起止符号，并没有错误时
-        if(w == ID) { //如果是标识符
-            push(&opn, AST_mknode(1, ID, token_text, 1)); //根据w生成一个结点，结点指针进栈opn
+        if(w == IDENT) { //如果是标识符
+            push(&opn, AST_mknode(IDENT, token_text, STRING)); //根据w生成一个结点，结点指针进栈opn
             w = gettoken();
         }
         else if (w == INT_CONST) { //如果是整数常量
-            push(&opn, AST_mknode(1, INT_CONST, token_int, 2)); 
+            push(&opn, AST_mknode(INT_CONST, token_int, INT)); 
             w = gettoken();
         }
-        else if (w_is_operator) //如果w是运算符
+        else if (w_is_operator) //如果w是运算符 ID
             switch (precede[w2precede(gettop(op))][w2precede(w)]) {
-                    case '<' : push(&op, AST_mknode(1, w, NULL, 0)); w = gettoken(); break;
+                    case '<' : push(&op, AST_mknode(w, NULL, 0)); w = gettoken(); break;
                     case '=' : if(!pop(&op, &t)); error++; w = gettoken(); break; //去括号
                     case '>' : if(!pop(&opn, &t2)); error++;
                                if(!pop(&opn, &t1)); error++;
