@@ -486,11 +486,6 @@ ASTnode* statement() {
         case CHAR : //同上
         case FLOAT : //同上
             return LocVarDef(); //处理局部定义语句
-        case INT_CONST :
-            //调用表达式处理子程序（结束符号为分号）
-            //正确时
-                w = gettoken();
-                //返回表达式语句子树指针
         case RC : //语句序列结束符号，如果语言支持switch语句，结束符号还有case和deafault
             w = gettoken();
             return NULL;
