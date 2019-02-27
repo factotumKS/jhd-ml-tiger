@@ -79,6 +79,7 @@ enum token_kind { //词法分析返回的token种类
     STATEMENT_LIST,     //语句序列
     LOC_VAR_DEF,        //局部变量定义
     LOC_VAR_LIST,       //局部变量序列
+    EXPRESSION,         //表达式
     IF_ELSE, DO_WHILE,  //特殊结点
     //栈结构中需要的起止符
     SS
@@ -652,11 +653,131 @@ void printerror(int row, int col, char* errortype) {
 
 //语法树显示---------------------------------------------------
 //r表示需要打印的结点，t表示开头的tab数量，有格式需要，打印方式按照结点的语法规则
-void AST_show(ASTnode* r， int* t) { //递归输出解析出的语法树
+void AST_show(ASTnode* r， int t) { //递归输出解析出的语法树
+    if (!r->name) return;
     switch (r->name) {
-        case 
+        case PROGRAM : //程序
+            printf("程序:\n");
+            AST_show(r->child, t);
+            break;
+        case EXT_DEF_LIST : //外部定义序列
+            AST_show(r->child, t);
+            break;
+        case EXT_VAR_DEF : //外部变量定义
+            printf("外部变量定义:\n");
+            printf("\t类型: %s\n", TYPE[r->child->name]);
+            printf("\t变量名:\n");
+            AST_show(r->child->brother, t+1);
+            break;
+        case EXT_VAR_LIST : //外部变量序列
+            printf("    IDENT: %s\n", r->text);
+            AST_show(r->child->brother, t);
+            break;
+        case FUNC_DEF : //函数定义
+            printf("\n函数定义:\n");
+            printf("\t类型: %s\n", TYPE[r->child->name]);
+            printf("\t函数名: %s\n", r->name);
+            printf("\t函数形参:\n");
+            AST_show(r->child->brother, t); //开始打印形参序列
+            AST_show(r->child->brother->brother, t); //打印函数体
+            break;
+        case FORMAL_PARA_LIST : //形式参数
+            printf("\t\t类型名: %s, 参数名: %s\n", TYPE[r->child->name], r->child->brother->text);
+            AST_show(r->child->brother->brother, t); //打印下一个形参序列
+            break;
+        case STATEMENT_BLOCK : //符合语句
+            printf("\t复合语句：\n");
+            AST_show(r->child, t); //打印语句序列函数
+            break;
+        case STATEMENT_LIST : //语句序列
+            printf("", r->child->text)
+            AST_show(r->child->brother, t); //打印下一条语句序列
+            break;
+        case LOC_VAR_DEF : //局部变量定义语句
+            break;
+        case LOC_VAR_LIST : //局部变量序列语句
+            break;
+        case IF : //没有else的if语句
+            printf("\t\t条件语句(if_then)\n");
+            printf("\t\t\t条件:\n");
+            AST_show(r->child, 4); //打印条件表达式
+            printf("\t\t\tif子句:\n");
+            AST_show(r->child->brother, t);
+        case IF_ELSE : //有else的if语句
+            printf("\t\t条件语句(if_then)\n");
+            printf("\t\t\t条件:\n");
+            AST_show(r->child, 4); //打印条件表达式
+            printf("\t\t\tif子句:\n");
+            AST_show(r->child->brother, t);
+            printf("\t\t\telse子句:\n");
+            AST_show(r->child->brother->brother, t);
+            break;
+        case WHILE : //while循环语句
+            printf("\t\twhile语句:\n");
+            printf("\t\t\t条件:\n");
+            AST_show(r->child, 4); //打印条件表达式
+            printf("\t\t\t循环体:\n");
+            AST_show(r->child->brother, t); //打印循环体
+            break;
+        case DO_WHILE : //do……while……循环语句
+            printf("\t\tdo_while语句:\n");
+            printf("\t\t\t循环体:\n");
+            AST_show(r->child, i); //打印循环体
+            printf("\t\t\t条件:\n");
+            AST_show(r->child, i); //打印条件表达式
+            break;
+        case FOR : //for循环语句
+            printf("\t\tfor语句:\n");
+            printf("\t\t\t初始化子句:\n");
+            AST_show(r->child, i); //打印语句
+            printf("\t\t\t循环条件:\n");
+            AST_show(r->child->brother, i); //打印循环体
+            printf("\t\t\t结尾表达式:\n");
+            AST_show(r->child->brother->brother, i); //打印表达式
+            printf("\t\t\t循环体:\n");
+            AST_show(r->child->brother->brother->brother, i); //打印循环体
+        case BREAK : //break子句
+            printf("\t\tbreak语句\n");
+            break;
+        case CONTINUE : //continue子句
+            printf("\t\tcontinue语句\n");
+            break;
+        case RETURN : //return子句
+            printf("\t\t返回语句:\n");
+            AST_show(r->child, t+1);
+            break;
+        case EXPRESSION : //表达式
+            printf("\t\t\t\t表达式:");
+            AST_expression_show(r->child);
+            printf("\n");
+            break;
+        case NULL : //到达结尾
+            break;
+        default : //应该没有这种奇怪的东西
     }
-    AST_show()
+}
+
+//打印表达式---------------------------------------------------
+void AST_expression_show(ASTnode* r) { //打印表达式
+    if (r == NULL) return;
+    if (r->name == IDENT && r->child->brother == NULL) { //如果是函数调用标识符，就不需要优先打印左子树
+        printf(" %s (", r->text); //打印函数调用和左括号
+        AST_show(r->child); //按照函数实参的逗号打印实参
+        printf(" )"); //打印右括号
+    }
+    if (r->child) { //优先打印括号和左子树
+        printf(" (")
+        AST_expression_show(r->child);
+    }
+    if (r->name == IDENT) printf(" %s", r->text);
+    else if (r->name == INT_CONST) printf(" 整数常量:%d", *((int*)r->text));
+    else if (r->name == FLOAT_CONST) printf(" 浮点数常量:%f", *((float*)r->text));
+    else if (r->name == CHAR_CONST) printf(" 字符常量:%c", *((char*)r->text));
+    else printf("%s", TYPE[r->name]); //打印其他运算符，包括函数调用中的括号
+    if ((r->child) && r->child->brother) { //其次打印括号和右子树
+        AST_expression_show(r->child->brother);
+        printf(" )")
+    }
 }
 
 //美化格式-----------------------------------------------------
