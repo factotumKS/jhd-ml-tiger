@@ -441,7 +441,7 @@ ASTnode* LocVarDef() {
         ASTnode* q = AST_mknode(LOC_VAR_LIST, NULL, 0); //创建下一个结点
         AST_add_child(p, q); //作为局部变量结点p的第一棵子树
         if (w != IDENT) { return NULL;} //记得报错
-        AST_add_child(p, AST_mknode(IDENT, token_text, STRING); //标识符作为局部变量结点v的第二棵子树
+        AST_add_child(p, AST_mknode(IDENT, token_text, STRING); //标识符作为局部变量结点p的第二棵子树
         w = gettoken();
         if (w == EQ) { //需要制作
             AST_add_child(p, expression(SEMI, COMMA)); //有两个终止符号，返回等于的表达式子树
@@ -580,7 +580,7 @@ ASTnode* statement() {
         case RC : //}:语句序列结束符号，如果语言支持switch语句，结束符号还有case和deafault
             w = gettoken();
             return NULL;
-        default errors += 1; printerror(row, col, ""); return NULL; //报错并返回NULL
+        default errors += 1; printerror(row, col, "语句无法解析"); return NULL; //报错并返回NULL
     }
 }
 
@@ -670,7 +670,7 @@ void AST_show(ASTnode* r， int t) { //递归输出解析出的语法树
             AST_show(r->child->brother, t+1);
             break;
         case EXT_VAR_LIST : //外部变量序列
-            printf("    IDENT: %s\n", r->text);
+            printf("\t\tIDENT: %s\n", r->text);
             AST_show(r->child->brother, t);
             break;
         case FUNC_DEF : //函数定义
@@ -690,22 +690,34 @@ void AST_show(ASTnode* r， int t) { //递归输出解析出的语法树
             AST_show(r->child, t); //打印语句序列函数
             break;
         case STATEMENT_LIST : //语句序列
-            printf("", r->child->text)
+            AST_show(r->child); //打印这条语句
             AST_show(r->child->brother, t); //打印下一条语句序列
             break;
         case LOC_VAR_DEF : //局部变量定义语句
+            printf("\t\t局部变量定义:\n");
+            printf("\t\t\t类型: %s", TYPE[r->child->name]);
+            printf("\t\t\t实参:\n")
+            AST_show(r->child->brother, t); //开始打印局部变量语句
             break;
         case LOC_VAR_LIST : //局部变量序列语句
+            if(r->child) { //如果存在才打印
+                printf("\t\t\t\tIDENT:%s", TYPE[r->child->brother->text]);
+                if (r->child->brother->brother) {
+                    printf(" = ");
+                    AST_expression_show(r->child->brother->brother);
+                }
+                else printf("\n");
+            }
             break;
         case IF : //没有else的if语句
             printf("\t\t条件语句(if_then)\n");
-            printf("\t\t\t条件:\n");
+            printf("\t\t\t条件:");
             AST_show(r->child, 4); //打印条件表达式
             printf("\t\t\tif子句:\n");
             AST_show(r->child->brother, t);
         case IF_ELSE : //有else的if语句
             printf("\t\t条件语句(if_then)\n");
-            printf("\t\t\t条件:\n");
+            printf("\t\t\t条件:");
             AST_show(r->child, 4); //打印条件表达式
             printf("\t\t\tif子句:\n");
             AST_show(r->child->brother, t);
@@ -714,7 +726,7 @@ void AST_show(ASTnode* r， int t) { //递归输出解析出的语法树
             break;
         case WHILE : //while循环语句
             printf("\t\twhile语句:\n");
-            printf("\t\t\t条件:\n");
+            printf("\t\t\t条件:");
             AST_show(r->child, 4); //打印条件表达式
             printf("\t\t\t循环体:\n");
             AST_show(r->child->brother, t); //打印循环体
@@ -723,7 +735,7 @@ void AST_show(ASTnode* r， int t) { //递归输出解析出的语法树
             printf("\t\tdo_while语句:\n");
             printf("\t\t\t循环体:\n");
             AST_show(r->child, i); //打印循环体
-            printf("\t\t\t条件:\n");
+            printf("\t\t\t条件:");
             AST_show(r->child, i); //打印条件表达式
             break;
         case FOR : //for循环语句
@@ -732,7 +744,7 @@ void AST_show(ASTnode* r， int t) { //递归输出解析出的语法树
             AST_show(r->child, i); //打印语句
             printf("\t\t\t循环条件:\n");
             AST_show(r->child->brother, i); //打印循环体
-            printf("\t\t\t结尾表达式:\n");
+            printf("\t\t\t结尾表达式:");
             AST_show(r->child->brother->brother, i); //打印表达式
             printf("\t\t\t循环体:\n");
             AST_show(r->child->brother->brother->brother, i); //打印循环体
@@ -747,7 +759,7 @@ void AST_show(ASTnode* r， int t) { //递归输出解析出的语法树
             AST_show(r->child, t+1);
             break;
         case EXPRESSION : //表达式
-            printf("\t\t\t\t表达式:");
+            printf("表达式:");
             AST_expression_show(r->child);
             printf("\n");
             break;
@@ -776,7 +788,7 @@ void AST_expression_show(ASTnode* r) { //打印表达式
     else printf("%s", TYPE[r->name]); //打印其他运算符，包括函数调用中的括号
     if ((r->child) && r->child->brother) { //其次打印括号和右子树
         AST_expression_show(r->child->brother);
-        printf(" )")
+        printf(" )");
     }
 }
 
@@ -786,10 +798,10 @@ void AST_modify(ASTnode* r) { //调整解析出的语法树
 }
 
 void main() {
-    FILE* fpo = fopen("test.c", "r");
-    fp = fopen(".c", "r");
+    FILE* fp = fopen("test.c", "r");
     prepare(); //预处理
     ASTnode* r = program(); //词法分析并进行语法分析得到AST
     AST_show(r, 0); //展示语法树，最初的tab为0
     AST_modify(r); //美化格式，输出到特定文件
+    fclose(fp);
 }
