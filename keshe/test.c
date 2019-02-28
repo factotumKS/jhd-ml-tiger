@@ -1,6 +1,8 @@
 int main() {
-    int a, b = -10/3;
-    int c = -20*2+3, d = -21%10;
-    int e = 30, f;
-    return a+2;
+    int a = 1+ 2;
+    if (a > 0)
+        a = a;
+    else 
+        a = - a;
+    return a;
 }
