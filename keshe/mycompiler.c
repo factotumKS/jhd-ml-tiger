@@ -60,15 +60,14 @@
 #include<stdlib.h>
 #include<string.h>
 #define IDLEN 32
-#define w_is_operand w==ID||w==INT_CONST||w==FLOAT_CONST||w==CHAR_CONST
-#define w_is_operator w>=ADD&&w<=ASSIGN
+#define KWNUM 11
 
 enum token_kind { //词法分析返回的token种类
     //词法分析得到的token
     INT=0, FLOAT, CHAR, IF, ELSE, DO, WHILE, FOR, CONTINUE, BREAK, RETURN,//10关键字
     ERROR_TOKEN, IDENT, INT_CONST, FLOAT_CONST, CHAR_CONST,
     ADD, SUB, MUL, DIV, MOD, GT, LT, GE, LE, EQ, NEQ, ASSIGN, AND, OR,
-    LP, RP, LC, RC, COMMA, SEMI, SS, //栈中的起止符
+    LP, RP, LC, RC, COMMA, SEMI, SS,/*栈中的起止符*/
     STRING,
     //语法分析中需要使用的内部结点标识
     PROGRAM,            //程序
@@ -254,7 +253,7 @@ int gettoken0() {
         do {token_text[i] = c; i++;}
         while ((c = fgetc(fp)) && ((c>='a' && c<='z') || (c>='A' && c<='Z') || (c>='0' && c <='9')));
         ungetc(c, fp);
-        for (int i = 0; i < 10; i++) {  //判断是否为关键字
+        for (int i = 0; i < KWNUM; i++) {  //判断是否为关键字
             if (!(strcmp(token_text, TYPE[i]))) return i;
         }
         return IDENT; //返回标识符
@@ -443,15 +442,14 @@ void stack_clear(stack* t) {
 //语法单位<程序>的子程序
 ASTnode* program() {
     ASTnode* root = AST_mknode(PROGRAM, NULL, 0);
-    w = gettoken();
-    if (root->child = ExtDefList()) return root;//语法正确返回语法树根节点
+    w = gettoken(); //程序的”第一动力“,这个token将会在外部定义中第一次被利用到
+    if (root->child = ExtDefList()) {printf("词法分析结束\n"); return root;}//语法正确返回语法树根节点
     printerror(row, col, "花Q\n");
     return NULL;//语法错误
 }
 
 //！！！语法单位<外部定义序列>的子程序
 ASTnode* ExtDefList() {
-    //printf("检测到外部定义序列\n");
     if (w == EOF) return NULL;
     ASTnode* root = AST_mknode(EXT_DEF_LIST, NULL, 0); //生成外部定义序列结点root
     AST_add_child(root, ExtDef());   //处理一个外部定义得到子树，作为root
@@ -461,7 +459,7 @@ ASTnode* ExtDefList() {
 
 //！语法单位<外部定义>子程序————不需要提前读取token
 ASTnode* ExtDef() { //处理外部定义序列，正确时返回子树根节点指针，否则返回NULL
-    //printf("检测到外部定义\n");
+    //printf("\n检测到外部定义\n");
     if (w != INT && w != FLOAT && w != CHAR) {printerror(row, col, "外部定义-类型错误\n"); return NULL;}
     token_name = w; //保存类型说明符
     w = gettoken();
@@ -469,8 +467,8 @@ ASTnode* ExtDef() { //处理外部定义序列，正确时返回子树根节点�
     strcpy(token_text0, token_text); //保存第一个变量名或函数名到token_text0
     w = gettoken();
     ASTnode* p;
-    if (w != LP) {w = gettoken(); p = ExtVarDef();} //调用外部变量定义子程序
-    else p = funcDef(); //调用函数定义子程序，这是因为读到左括号
+    if (w != LP) p = ExtVarDef(); //调用外部变量定义子程序，再读一个，刚好可以在循环开头就判断逗号分号
+    else p = funcDef(); //调用函数定义子程序，这是因为读到左括号，读到这里就可以了，后面交给复合语句处理即可
     if (p) return p; //如果返回值p非空，表示成功完成一个外部定义的处理
 }
 
@@ -479,21 +477,19 @@ ASTnode* ExtVarDef() {
     printf("检测到外部变量定义\n");
     ASTnode* r = AST_mknode(EXT_VAR_DEF, NULL, 0); //生成外部变量定义结点
     AST_add_child(r, AST_mknode(token_name, NULL, 0)); //根据读入外部变量的类型生成结点,作为root第一个孩子
-    ASTnode* p = AST_mknode(EXT_VAR_LIST, NULL, 0); //生成外部变量结点,
+    ASTnode* p = AST_mknode(EXT_VAR_LIST, NULL, 0); //生成外部变量序列结点,
     AST_add_child(r, p); //p作为root第二个孩子
     AST_add_child(p, AST_mknode(IDENT, token_text0, STRING)); //由保存在token_text0的第一个变量名生成第一个变量名结点
     while (1) {
-        if (w != ',' || w != ';') {printerror(row, col, "外部变量定义-格式错误\n"); AST_clear(r); return NULL;}//报错，释放root为根的全部结点，空指针返回
-        if (w == ';') {
-            w = gettoken();
-            return r; //返回根节点
-        }
-        w = gettoken();
-        if (w != IDENT) {printerror(row, col, "外部变量定义-非标识符\n"); AST_clear(r); return NULL;}//报错，释放root为根的全部结点
+        if (w != COMMA || w != SEMI) {printerror(row, col, "外部变量定义-格式错误\n"); /*AST_clear(r);*/ return NULL;}//报错，释放root为根的全部结点，空指针返回
+        if (w == SEMI) {w = gettoken(); return r;} //返回根节点
+        w = gettoken(); //读取逗号后面的下一个标识符
+        printf("OOOOO\n");
+        if (w != IDENT) {printerror(row, col, "外部变量定义-非标识符\n"); /*AST_clear(r);*/ return NULL;}//报错，释放root为根的全部结点
+        AST_add_child(p, AST_mknode(IDENT, token_text, STRING)); //根据token_text的变量名生成一个变量结点，作为p的第一个孩子
         ASTnode* q = AST_mknode(EXT_VAR_LIST, NULL, 0); //生成外部变量结点，根指针为q
         AST_add_child(p, q); //q,作为p的第二个孩子
         p = q;
-        AST_add_child(p, AST_mknode(IDENT, token_text0, STRING)); //根据token_text的变量名生成一个变量结点，作为p的第一个孩子
         w = gettoken(); //期待得到一个逗号/分号
     }
 }
@@ -570,14 +566,8 @@ ASTnode* statementBlock() {
     w = gettoken(); //层层调用，最终交给statement，这里要读取下一个token作为下面递归调用的“第一动力”
     ASTnode* root = AST_mknode(STATEMENT_BLOCK, NULL, 0);
     AST_add_child(root, statementList()); //调用处理语句序列子程序，返回子树根结点指针，作为root的第一个孩子
-    //上面结束了这里应该是一个反大括号，可能需要gettoken()
-    if (w != '}') {
-        //返回空指针，报错并释放结点
-        printerror(row, col, "复合语句-不正常结束\n");
-        return NULL;
-    }
-    w = gettoken();
-    return root; //返回复合语句子树根指针
+    printf("确认复合语句结束\n");
+    return root; //返回复合语句子树根指针，不需要gettoken，因为上面语句列表结束之后已经读取了下一个token
 }
 
 //语法单位<语句序列>子程序————不需要提前读取token
@@ -600,7 +590,7 @@ ASTnode* statement_statementBlock() {
     ASTnode* r;
     if (w == LC) r = statementBlock(); //读到左大括号说明是复合语句
     else r = statement();
-    return r;
+    return r; //经过上面调用都额外读取了一个token
 }
 
 //语法单位<语句>子程序————需要提前读取token
@@ -640,11 +630,9 @@ ASTnode* statement() {
             return r;
         case IDENT : //表达式语句，这个ID是其一部分；表达式语句的结尾是确认为分号的，需要消除
             printf("检测到表达式语句\n");
-            return expression(); //这个ID读入作为第一个token //执行后w是导致终止的token
+            r = expression(); //这个ID读入作为第一个token //执行后w是导致终止的token
             if (w != SEMI) {printf("表达式语句结束错误\n"); return NULL;}
-            w = gettoken();
-            printf("------\n");
-            break; //最终多读出一个token
+            w = gettoken(); return r; //最终多读出一个token
         case DO : //分析do-while语句（实验不要求）
             printf("检测到do-while语句\n");
             r1 = statement_statementBlock(); //用于保存do子句的指针，可能是语句或者语句块
@@ -703,6 +691,7 @@ ASTnode* statement() {
             w = gettoken(); return r;
         case RETURN : //return
             r = AST_mknode(RETURN, NULL, 0);
+            w = gettoken(); //为下面的表达式读入一个token
             AST_add_child(r, expression()); //将表达式语句作为return结点的第一棵也是唯一一棵子树
             if (w != SEMI) {printerror(row, col, "not yet\n"); return NULL;} //continue语句结束之后需要检查后面一个token是否为分号
             w = gettoken(); return r;
@@ -711,6 +700,7 @@ ASTnode* statement() {
         case FLOAT : //float局部变量定义
             return LocVarDef(); //处理局部变量定义说明
         case RC : //}:语句序列结束符号，如果语言支持switch语句，结束符号还有case和deafault
+            printf("检测到复合语句结束\n");
             w = gettoken();
             return NULL;
         default : error = 1; printerror(row, col, "语句无法解析"); return NULL; //报错并返回NULL
@@ -753,7 +743,7 @@ ASTnode* expression() {
         else if(lp <= rp && w == RP) { //左右括号数匹配时出现了一个右括号，说明能读取到的表达式已经结束了，是否正确交给别的程序，到此为止
             token_name = w; w = SS; continue;//输入起止符
         }
-        else if (getRank(w) > 0) { //运算符有一个不等于0的优先级
+        else if (getRank(w) > 0 && w != COMMA) { //运算符有一个不等于0的优先级，逗号交给函数调用的程序单独处理，算术表达式中不应该考虑逗号
             if ((gettopname(op)==LP && w==SS) || (gettopname(op)==SS && w==RP)) {error = 1; break;}
             else if (gettopname(op)==LP && w==RP) { //当右括号消栈遇到左括号
                 ASTnode *t;
@@ -795,6 +785,7 @@ ASTnode* expression() {
 
 //语法单位<函数调用>子程序-------已经读取了LP到w，尚未进一步读取
 ASTnode* funcCall() { //函数调用
+    printf("检测到函数调用\n");
     ASTnode* p = AST_mknode(ACTUAL_PARA_LIST, NULL, 0);
     ASTnode* q;
     while(1) {
@@ -802,11 +793,11 @@ ASTnode* funcCall() { //函数调用
         if (w == RP) { //实参列表已经结束了
             return p;
         } //否则就还没有结束，继续读表达式
-        q = expression(); //得到表达式
+        q = expression(); //得到表达式，结束之后得到结尾的符号
         AST_add_child(p, q);
         AST_add_child(p, AST_mknode(ACTUAL_PARA_LIST, NULL, 0));
-        if(w == RP) { //形参结束了了了
-            return p;
+        if(w == RP) { //形参结束了!
+            w = gettoken(); return p; //需要读下一个token
         }
         if(w == COMMA) { //形参还有，这个循环还会继续
             p = q; continue; //下次循环
@@ -1041,7 +1032,7 @@ void main() {
     fp = fopen("test.c", "r");
     prepare(); //预处理
     ASTnode* r = program(); //词法分析并进行语法分析得到AST
-    AST_show(r, 0); //展示语法树，最初的tab为0
-    AST_modify(r); //美化格式，输出到特定文件
+    //AST_show(r, 0); //展示语法树，最初的tab为0
+    //AST_modify(r); //美化格式，输出到特定文件
     fclose(fp);
 }
