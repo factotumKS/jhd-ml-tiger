@@ -1,9 +1,11 @@
+int i, r, c;
+
 int addi(int a, int b);
 int fact1(int a);
 int fact2(int a);
 
 int addi (int a, int b){
-    return a + b;
+    return 1+ 2;
 }
 
 int fact1 (int a) {
