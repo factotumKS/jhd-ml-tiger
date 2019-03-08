@@ -298,9 +298,6 @@ int      gettoken0() {
     if (row == 0) row++; //初始化行号
     if (feof(fp)) return EOF; //保险措施
     char c;
-    for(int i = 0; i < IMAX; i++) ident_text[i] = 0;
-    for(int i = 0; i < IMAX; i++) ident_text0[i] = 0;
-    ident_text[0] = '?'; ident_text0[0] = '?';
     
     //处理全部空白符
     while ((c = fgetc(fp)) && (c == ' '|| c == '\t'|| c == '\n')){
@@ -312,6 +309,7 @@ int      gettoken0() {
         int i = 0;
         do {ident_text[i] = c; i++;}
         while ((c = fgetc(fp)) && ((c>='a' && c<='z') || (c>='A' && c<='Z') || (c>='0' && c <='9')));
+        ident_text[i] = 0; //封！
         ungetc(c, fp);
         for (int i = 0; i < KWNUM; i++) {  //判断是否为关键字
             if (!(strcmp(ident_text, keepwords[i]))) return i+INT;
@@ -518,6 +516,7 @@ ASTnode* ExtVarDef() {
     ASTnode* q = AST_mknode(EXT_VAR_LIST, NULL, 0);
     AST_addchild(p, q);
     p = q;
+    q = AST_mknode(EXT_VAR_LIST, NULL, 0);
     while(1) {
         if(match(SEMI)) {
             w = gettoken();
@@ -853,9 +852,10 @@ ASTnode* LocVarDef() {
     }
     else e = AST_mknode(EXPRESSION, NULL, 0);
     AST_addchild(p, e);
-    ASTnode* q = AST_mknode(EXT_VAR_LIST, NULL, 0);
+    ASTnode* q = AST_mknode(LOC_VAR_LIST, NULL, 0);
     AST_addchild(p, q);
     p = q;
+    q = AST_mknode(LOC_VAR_LIST, NULL, 0);
     while(1) {
         if(match(SEMI)) {
             w = gettoken();
@@ -863,7 +863,7 @@ ASTnode* LocVarDef() {
         }
         if(match(COMMA)) {
             if(getmatch_error(IDENT, "局部变量定义需要标识符")) return NULL;
-            AST_addchild(p, AST_mknode(IDENT, ident_text0, STR));
+            AST_addchild(p, AST_mknode(IDENT, ident_text, STR));
             if(getmatch(ASSIGN)) {
                 w = gettoken(); //可能为逗号分号
                 e = expr();
@@ -907,7 +907,7 @@ ASTnode* LocArrDef() {
 //5、打印排版部分
 void     AST_show(ASTnode* r, int n) {
     if(!r) return;
-    ASTnode *ch1 = NULL, *ch2 = NULL;
+    ASTnode *ch1 = NULL, *ch2 = NULL, *ch3 = NULL;
     if(AST_getname(r) == PROGRAM) {
         printf("\n");
         for(int i = 0; i < 60; i++) printf("*");
@@ -928,15 +928,12 @@ void     AST_show(ASTnode* r, int n) {
             AST_show(ch2, 0);
             return;
         case EXT_VAR_DEF:   //<外部变量定义>
-            ch1 = AST_getchi(r, 1);
-            ch2 = AST_getchi(r, 2);
+            ch1 = AST_getchi(r, 1); //变量类型
+            ch2 = AST_getchi(r, 2); //变量序列
             printf("外部变量定义：\n");
             pt(1); printf("类型：%s\n", keepwords[AST_getname(ch1)-INT]);
             pt(1); printf("变量：\n");
-            printf("第一个变量的名字：%s\n", AST_gettext(ch2->chi));
-            printf("第一个真的是变量吗：%s\n", keepwords[AST_getname(ch2->chi)-INT]);
-            printf("后面真的是链吗：%d\n", AST_getname(ch2->chi->bro)==EXT_VAR_LIST);
-            //AST_show(ch2, 0);
+            AST_show(ch2, 0);
             return;
         case EXT_VAR_LIST:  //<外部变量序列>
             if(!AST_getchi(r, 1)) return;
@@ -947,6 +944,22 @@ void     AST_show(ASTnode* r, int n) {
             return;
         case EXT_ARR_DEF:   //<外部数组定义>
         case FUN_DEF:       //<函数定义>
+            ch1 = AST_getchi(r, 1); //返回值类型
+            ch2 = AST_getchi(r, 2); //函数名
+            ch3 = AST_getchi(r, 3); //（可能存在的）函数体
+            if(ch3) {
+                printf("函数定义：\n");
+                pt(1); printf("返回值类型：%s\n", keepwords[AST_getname(ch1)-INT]);
+                pt(1); printf("函数名：%s\n", AST_gettext(ch2));
+                AST_show(ch3, 0); //打印复合语句了
+            }
+            else {
+                printf("函数声明：\n");
+                pt(1); printf("返回值类型：%s\n", keepwords[AST_getname(ch1)-INT]);
+                pt(1); printf("函数名：%s\n", AST_gettext(ch2));
+            }
+            return;
+        case :
         default :
             return;
     }
