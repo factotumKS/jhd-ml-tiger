@@ -26,7 +26,10 @@ int fact2 (int a) {
 
 int isodd(int a) {
     if (a %2 == 1) {
-        return 1;
+        if(a > 0)
+            return 1;
+        else 
+            return 0;
     }
     return 0;
 }
