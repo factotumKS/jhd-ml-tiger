@@ -2,9 +2,10 @@
 #include<stdlib.h>
 #include<string.h>
 #define IMAX 32
-#define SMAX 100;
+#define SMAX 100
+#define KWNUM 11
 
-typedef enum {
+enum token_kind {
     INT=257, FLOAT, CHAR, IF, ELSE, DO, WHILE, FOR, CONTINUE, BREAK, RETURN,//10关键字
     ERROR_TOKEN, IDENT, INT_CONST, FLOAT_CONST, CHAR_CONST,
     ADD, SUB, MUL, DIV, MOD, GT, LT, GE, LE, EQ, NEQ, ASSIGN, AND, OR,
@@ -18,20 +19,23 @@ typedef enum {
     FORMAL_PARA,        //形参
     FORMAL_PARA_LIST,   //形参列表
     FUN_CALL,           //函数调用
+    ARRAY_CALL,         //数组调用
     ACTUAL_PARA_LIST,   //实参列表
     STATEMENT_BLOCK,    //复合语句
     STATEMENT_LIST,     //语句序列
     LOC_VAR_DEF,        //局部变量定义
     LOC_VAR_LIST,       //局部变量序列
+    LOC_ARR_DEF,        //局部数组定义
     EXPRESSION,         //表达式
-}
+    IF_ELSE,
+};
 
 char* keepwords[] = {
     "int", "float", "char", "if", "else", "do", "while", "for", "continue", "break", "return",
     "error_token", "id", "int_const", "float_const", "char_cosnt",
     "+", "-", "*", "/", "%", ">", "<", ">=", "<=", "==", "!=", "=", "&&", "||",
     "(", ")", "[", "]", "{", "}", ",", ";", "#",
-}
+};
 
 typedef union point_ {
     int* pi;  //指向整数常量
@@ -52,6 +56,7 @@ typedef struct stack_ {
 } stack;
 
 //全局变量------------------------------------------------------------------
+FILE* fp;   //指向被解析的源文件
 int w;      //当前读取的tokenname
 int row;    //当前行号
 int pe;     //存在解析错误
@@ -75,8 +80,8 @@ void     AST_addchild(ASTnode* r, ASTnode* c);  //为r添加一个孩子
 //2、Stack数据结构部分
 stack*   stack_init();               //
 void     push(stack* s, ASTnode* n); //
-int      pop(stack* s, ASTnode* n);  //
-ASTnode  gettop(stack* s);           //
+int      pop(stack* s, ASTnode** n);  //
+ASTnode* gettop(stack* s);           //
 int      gettopname(stack* s);       //
 //3、词法分析部分
 int      gettoken();                 //
@@ -85,7 +90,7 @@ int      match(int c);               //检测当前token是否为给出
 int      getmatch(int c);            //检测下一个token是否为给出
 int      match_error(int c, const char* s);
 int      getmatch_error(int c, const char* s);
-int      matchType_error(int n);     //检测是否为类型
+int      matchType_error(const char* s);
 int      matchOp(int c);             //检测是否为运算符
 void     layerUp();                  //递归增加一层
 void     layerDown();                //递归减少一层，并在完全结束之后负责额外读取
@@ -105,7 +110,8 @@ ASTnode* statementBlock();  //<复合语句><复合语句序列>循环
 ASTnode* statement();       //<语句>生成
 ASTnode* expr();            //<表达式>生成
 ASTnode* funCall();         //<函数调用>生成
-ASTnode* LocArrDef();           //<数组>生成，用于处理表达式中的数组
+ASTnode* arrayCall();       //<数组调用>生成
+ASTnode* LocArrDef();       //<数组>生成，用于处理表达式中的数组
 ASTnode* LocVarDef();       //<局部变量定义>，<局部变量序列>循环
 //5、打印排版部分
 void     AST_show();
@@ -116,34 +122,35 @@ void     AST_output();
 ASTnode* AST_mknode(int n, void* t, int l) {
     ASTnode* r = malloc(sizeof(ASTnode));
     r->name = n; r->bro = NULL; r->chi = NULL;
-    switch (l) {
-        case INT   :
-            int* n = malloc(sizeof(int));
-            int* tmp = t;
-            *n = *tmp; //将指针转换为相应指针并转移值
-            (r->text).pi = n;
-            return r;
-        case FLOAT :
-            float* n = malloc(sizeof(float));
-            float* tmp = t;
-            *n = *tmp;
-            (r->text).pf = n;
-            return r;
-        case CHAR  :
-            char* n = malloc(sizeof(char));
-            char* tmp = t;
-            *n = *tmp; 
-            (r->text).pc = n;
-            return r;
-        case STR:
-            char* tmp = t; //先转化为字符指针更安全
-            char* n = malloc(strlen(tmp) + 1);
-            strcpy(n, tmp); //字符串拷贝
-            (r->text).pc = n;
-            return r;
-        default    : 
-            return r;
+    if(l == INT) {
+        int* n = malloc(sizeof(int));
+        int* tmp = t;
+        *n = *tmp; //将指针转换为相应指针并转移值
+        (r->text).pi = n;
+        return r;
     }
+    else if(l == FLOAT) {
+        float* n = malloc(sizeof(float));
+        float* tmp = t;
+        *n = *tmp;
+        (r->text).pf = n;
+        return r;
+    }
+    else if(l == CHAR) {
+        char* n = malloc(sizeof(char));
+        char* tmp = t;
+        *n = *tmp; 
+        (r->text).pc = n;
+        return r;
+    }
+    else if(l == STR) {
+        char* tmp = t; //先转化为字符指针更安全
+        char* n = malloc(strlen(tmp) + 1);
+        strcpy(n, tmp); //字符串拷贝
+        (r->text).pc = n;
+        return r;
+    }
+    else return r;
 }
 ASTnode* AST_getchi(ASTnode* r, int n) {
     if (n <= 0) return NULL;
@@ -158,14 +165,14 @@ ASTnode* AST_getchi(ASTnode* r, int n) {
     return nr;
 }
 int      AST_getchiname(ASTnode* r, int n) {
-    ASTnode nr = AST_getchi(r, n);
+    ASTnode* nr = AST_getchi(r, n);
     if (nr) return nr->name;
     else return 0; //处理空情况
 }
 ASTnode* AST_getbro(ASTnode* r, int n) {
     if(n <= 0) return NULL;
     int i = 0;
-    ASTnode* nr = r
+    ASTnode* nr = r;
     while(i < n) {
         if(nr->bro) nr = nr->bro;
         else return NULL;
@@ -174,7 +181,7 @@ ASTnode* AST_getbro(ASTnode* r, int n) {
     return nr;
 }
 int      AST_getbroname(ASTnode* r, int n) {
-    ASTnode nr = AST_getbro(r, n);
+    ASTnode* nr = AST_getbro(r, n);
     if (nr) return nr->name;
     else return 0; //处理空情况
 }
@@ -205,7 +212,7 @@ void     push(stack* s, ASTnode* n) {
     if (!s->top) { //第一次push
         s->top = s->A;
     }
-    top++; *(s->top) = n;
+    (s->top)++; *(s->top) = n;
 }
 int      pop(stack* s, ASTnode** n) {
     ASTnode** b = s->A;
@@ -218,11 +225,11 @@ int      pop(stack* s, ASTnode** n) {
         s->top = NULL;
         return 1;
     }
-    *n = *(s->top); top--; return 1;
+    *n = *(s->top); (s->top)--; return 1;
 }
 ASTnode* gettop(stack* s) {
     if(!s->top) return NULL;
-    return s->top;
+    return *(s->top);
 }
 int      gettopname(stack* s) {
     ASTnode* nr = gettop(s);
@@ -240,14 +247,15 @@ int      gettoken() {
     else if (w == INT_CONST) printf("整数常量 %d\n", int_value);
     else if (w == FLOAT_CONST) printf("浮点数常量 %f\n", float_value);
     else if (w == CHAR_CONST) printf("字符常量 %c\n", char_value);
-    else printf("%s\n", keepwords[w]);
+    else printf("%s\n", keepwords[w-INT]);
     return w;
 }
 int      gettoken0() {
     if (row == 0) row++; //初始化行号
     if (feof(fp)) return EOF; //保险措施
     char c;
-    for(int i = 0; i < IDLEN; i++) ident_text[i] = 0;
+    for(int i = 0; i < IMAX; i++) ident_text[i] = 0;
+    for(int i = 0; i < IMAX; i++) ident_text0[i] = 0;
     
     //处理全部空白符
     while ((c = fgetc(fp)) && (c == ' '|| c == '\t'|| c == '\n')){
@@ -261,7 +269,7 @@ int      gettoken0() {
         while ((c = fgetc(fp)) && ((c>='a' && c<='z') || (c>='A' && c<='Z') || (c>='0' && c <='9')));
         ungetc(c, fp);
         for (int i = 0; i < KWNUM; i++) {  //判断是否为关键字
-            if (!(strcmp(ident_text, TYPE[i]))) return i;
+            if (!(strcmp(ident_text, keepwords[i]))) return i+INT;
         }
         return IDENT; //返回标识符
     }
@@ -300,7 +308,7 @@ int      gettoken0() {
  
     //处理字符char
     if (c == '\'') { //字符常量
-        token_char = fgetc(fp);
+        char_value = fgetc(fp);
         c = fgetc(fp); //消化掉后面的引号
         return CHAR_CONST;
     }
@@ -317,13 +325,11 @@ int      gettoken0() {
         case '-' : return SUB;
         case '%' : return MOD;
         case '[' : return L2;
-        case ']' : return P2;
+        case ']' : return R2;
         case '{' : return L3;
-        case '}' : return P3;
+        case '}' : return R3;
         case '(' : return LP;
         case ')' : return RP;
-        case '{' : return LC;
-        case '}' : return RC;
         case '*' : return MUL;
         case '/' : return DIV;
         case ',' : return COMMA;
@@ -338,7 +344,7 @@ int      match(int c) {
 }
 int      getmatch(int c) {
     w = gettoken();
-    return match(c);
+    return (match(c));
 }
 int      match_error(int c, const char* s) {
     if(!match(c)) {
@@ -349,16 +355,16 @@ int      match_error(int c, const char* s) {
 }
 int      getmatch_error(int c, const char* s) {
     if(!getmatch(c)) {
-        printf("%s", s);
+        printf("\t！！！%s\n", s);
         pe = 1; return 1; //表示检测到错误
     }
     return 0;
 }
 int      matchType_error(const char* s) {
     if(w==INT||w==FLOAT||w==CHAR) return 0;
-    match_error(INT, s);
+    match_error(0, s);
 }
-int      matchOp() {
+int      matchOp(int c) {
     if(w==LP||w==RP||w==MUL||w==DIV||w==MOD||w==ADD||w==SUB||
        w==GT||w==LT||w==GE||w==LE||w==NEQ||w==EQ||
        w==OR||w==AND||w==ASSIGN||w==COMMA||w==SS)
@@ -413,7 +419,7 @@ ASTnode* program() {
     ASTnode* r = AST_mknode(PROGRAM, NULL, 0);
     w = gettoken(); //程序的”第一动力“,这个token将会在外部定义中第一次被利用到
     AST_addchild(r, ExtDefList());
-    if(!r->child) {
+    if(!AST_getchi(r, 1)) {
         printf("<程序>检测到错误\n");
         return NULL;
     }
@@ -429,10 +435,10 @@ ASTnode* ExtDefList() {
 }
 ASTnode* ExtDef() {
     if(pe) return NULL;
-    if(matchType_error("外部定义开头为类型")) return NULL;
+    if(matchType_error("外部定义开头应该为类型")) return NULL;
     token_name = w; //保存类型说明符
-    if(getmatch(IDENT, "外部定义需要标识符")) return NULL:
-    strcpy(token_text0, token_text); //保存第一个变量名或函数名到token_text0
+    if(getmatch_error(IDENT, "外部定义需要标识符")) return NULL;
+    strcpy(ident_text0, ident_text); //保存第一个变量名或函数名到ident_text0
     if(getmatch(LP)) {
         w = gettoken();
         return funDef();
@@ -448,23 +454,23 @@ ASTnode* ExtArrDef() {
     printf("检测到外部数组定义\n");
     ASTnode* r = AST_mknode(EXT_ARR_DEF, NULL, 0);
     AST_addchild(r, AST_mknode(token_name, NULL, 0));
-    AST_addchild(r, AST_mknode(IDENT, token_text0, STR));
+    AST_addchild(r, AST_mknode(IDENT, ident_text0, STR));
     if(match_error(INT_CONST, "外部数组必须为整数大小")) return NULL;
-    AST_addchild(r, AST_mknode(INT_CONST, int_value, INT));
+    AST_addchild(r, AST_mknode(INT_CONST, &int_value, INT));
     if(getmatch_error(R2, "外部数组需要反方括号")) return NULL;
     if(getmatch_error(SEMI, "外部数组声明需要分号结尾")) return NULL;
-    w = gettoken; return r;
+    w = gettoken(); return r;
 }
 ASTnode* ExtVarDef() {
     if(pe) return NULL;
     printf("检测到外部变量定义\n");
     ASTnode* r = AST_mknode(EXT_VAR_DEF, NULL, 0);
     AST_addchild(r, AST_mknode(token_name, NULL, 0));
-    ASTnode* p = AST_mknode(EXT_VAR_LIST, NULL, 0));
+    ASTnode* p = AST_mknode(EXT_VAR_LIST, NULL, 0);
     AST_addchild(r, p);
 
-    AST_addchild(p, AST_mknode(IDENT, token_text0, STR));
-    ASTnode* q = AST_mknode(EXT_VAR_LIST, NULL, 0));
+    AST_addchild(p, AST_mknode(IDENT, ident_text0, STR));
+    ASTnode* q = AST_mknode(EXT_VAR_LIST, NULL, 0);
     AST_addchild(p, q);
     p = q;
     while(1) {
@@ -473,8 +479,8 @@ ASTnode* ExtVarDef() {
             return r;
         }
         if(match(COMMA)) {
-            if(getmatch(IDENT, "外部变量定义需要标识符")) return NULL;
-            AST_addchild(p, AST_mknode(IDENT, token_text0, STR));
+            if(getmatch_error(IDENT, "外部变量定义需要标识符")) return NULL;
+            AST_addchild(p, AST_mknode(IDENT, ident_text0, STR));
             AST_addchild(p, q); //q,作为p的第二个孩子
             p = q;
             q = AST_mknode(EXT_VAR_LIST, NULL, 0);
@@ -488,11 +494,10 @@ ASTnode* ExtVarDef() {
 ASTnode* funDef() {
     if(pe) return NULL;
     printf("检测到函数定义\n");
-    ASTnode* r = AST_mknode(FUN_DEF, token_text0, STR); //函数名保存
+    ASTnode* r = AST_mknode(FUN_DEF, ident_text0, STR); //函数名保存
     AST_addchild(r, AST_mknode(token_name, NULL, 0));
-    w = gettoken(); //准备给形参读入第一个参数的类型名
     AST_addchild(r, formalPara());
-    if(getmatch(SEMI)) { //这是函数声明语句
+    if(match(SEMI)) { //这是函数声明语句
         w = gettoken();
         return r;
     }
@@ -506,7 +511,7 @@ ASTnode* funDef() {
 }  
 ASTnode* formalPara(){
     if(pe) return NULL;
-    ASTnode* r = AST_mknode(FORMAL_PARA, token_text0, STR);
+    ASTnode* r = AST_mknode(FORMAL_PARA, ident_text0, STR);
     ASTnode* p = AST_mknode(FORMAL_PARA_LIST, NULL, 0);
     AST_addchild(r, p);
     ASTnode* q = AST_mknode(FORMAL_PARA_LIST, NULL, 0);
@@ -514,7 +519,7 @@ ASTnode* formalPara(){
         if(matchType_error("形参需要类型符号")) return NULL;
         AST_addchild(p, AST_mknode(w, NULL, 0));
         if(getmatch_error(IDENT, "形参需要标识符")) return NULL;
-        AST_addchild(p, AST_mknode(IDENT, token_text, STR));
+        AST_addchild(p, AST_mknode(IDENT, ident_text, STR));
         AST_addchild(p, q);
         w = gettoken();
         if(match(RP)) {
@@ -534,10 +539,10 @@ ASTnode* formalPara(){
 ASTnode* statementBlock() {
     if(pe) return NULL;
     printf("检测到复合语句\n");
-    ASTnode* r = AST_addchild(STATEMENT_BLOCK, NULL, 0);
-    ASTnode* p = AST_addchild(STATEMENT_LIST, NULL, 0);
+    ASTnode* r = AST_mknode(STATEMENT_BLOCK, NULL, 0);
+    ASTnode* p = AST_mknode(STATEMENT_LIST, NULL, 0);
     AST_addchild(r, p);
-    ASTnode* q = AST_addchild(STATEMENT_LIST, NULL, 0);
+    ASTnode* q = AST_mknode(STATEMENT_LIST, NULL, 0);
     while(1) {
         ASTnode* n = statement();
         if(!n) return r;
@@ -601,7 +606,7 @@ ASTnode* statement() {
         case FOR:
             layerUp();
             printf("检测到for语句\n");
-            if(getmatch(LP, "for循环缺少左括号")) return NULL;
+            if(getmatch_error(LP, "for循环缺少左括号")) return NULL;
             w = gettoken(); r1 = statement();
             r2 = expr(); //上面有额外读取
             if(match_error(SEMI, "for循环初始化")) return NULL;
@@ -638,7 +643,7 @@ ASTnode* statement() {
         case FLOAT: //局部变量声明
             token_name = w;
             w = gettoken();
-            strcpy(token_text0, token_text);
+            strcpy(ident_text0, ident_text);
             if(getmatch(L2)) { //数组声明
                 w = gettoken();
                 r = LocArrDef();
@@ -662,65 +667,136 @@ ASTnode* expr() {
     push(op, AST_mknode(SS, NULL, 0));
     int error = 0;
     while((!match(SS) || gettopname(op) != SS) && !error) {
-        if(match(IDENT)) {
-            token_name = w;
-            strcpy(token_text0, token_text);
+        if(match(IDENT)) { //函数调用、数组调用、或标识符
+            strcpy(ident_text0, ident_text);
             if(getmatch(LP)) { //确认为函数调用
-                push(op, funCall());
+                w = gettoken();
+                push(opn, funCall());
                 continue;
             }
             if(match(L2)) { //确认为数组调用
-                push(op, arrayCall());
+                w = gettoken();
+                push(opn, arrayCall());
             }
             else {
-                push(opn, AST_mknode(IDENT, token_text0, STR));
+                push(opn, AST_mknode(IDENT, ident_text0, STR));
                 continue;
             }
         }
-        else if(match(INT_CONST)) {
+        else if(match(INT_CONST)) { //操作数栈：整数常量
             push(opn, AST_mknode(INT_CONST, &int_value, INT));
             w = gettoken(); continue;
         }
-        else if(match(float_CONST)) {
+        else if(match(FLOAT_CONST)) { //操作数栈：浮点数常量
             push(opn, AST_mknode(INT_CONST, &float_value, INT));
             w = gettoken(); continue;
         }
-        else if(match(INT_CONST)) {
-            push(opn, AST_mknode(INT_CONST, &char_value, INT));
+        else if(match(CHAR_CONST)) { //操作数栈：字符常量
+            push(opn, AST_mknode(CHAR_CONST, &char_value, INT));
             w = gettoken(); continue;
         }
-        else if(lp <= rp && w == RP) {
+        else if(lp <= rp && w == RP) { //括号数不匹配
             token_name = w; w = SS; continue;
         }
         else if(matchOp(w)) {
-
+            //括号未正常闭合
+            if ((gettopname(op)==LP && match(SS))||(gettopname(op)==SS && match(RP))) {
+                error = 1;
+                break;
+            }
+            //右括号消栈遇到左括号
+            else if (gettopname(op)==LP && match(RP)) { //当右括号消栈遇到左括号
+                ASTnode *t;
+                if(!(pop(op, &t))) {error = 1; break;}
+                w = gettoken(); continue;
+            }
+            //压栈
+            else if ((rank(gettopname(op)) > rank(w)) || (gettopname(op)==LP && !match(RP))) {
+                if(gettopname(op)==LP && !match(RP)) lp++; //对左括号数量进行计数
+                push(op, AST_mknode(w, NULL, 0));
+                w = gettoken(); continue;
+            }
+            //执行运算符
+            else if ((rank(gettopname(op)) <= rank(w)) || (gettopname(op)!=LP && match(RP))) {
+                if(gettopname(op)!=LP && match(RP)) rp++; //对右括号数量进行计数
+                ASTnode *t = NULL, *t1 = NULL, *t2 = NULL;
+                if(!(pop(op, &t)))   {error = 1; break;}
+                if(!(pop(opn, &t2))) {error = 1; break;}
+                if(!(pop(opn, &t1))) {error = 1; break;}
+                AST_addchild(t, t1); AST_addchild(t, t2);
+                push(opn, t); //不需要再读入任何token，可能就这样一口气下降到底
+                continue;
+            }
+            else; //该情况不可能存在
         }
-
+        else { //不在运算符中的字符
+            token_name = w; w = SS;
+        }
+    }
+    if(!error) { //没有中途发生语法错误
+        ASTnode* r = AST_mknode(EXPRESSION, NULL, 0);
+        ASTnode* p = NULL; pop(opn, &p); //弹出运算符栈中的唯一那个
+        AST_addchild(r, p);
+        w = token_name; //将结尾起止符改回原来的token名称用于下面的分析
+        return r;
+    }
+    else {
+        match_error(0, "检测到表达式中出现语法错误");
+        return NULL;
     }
 }
 ASTnode* funCall() {
     printf("检测到表达式中函数调用\n");
+    ASTnode* r = AST_mknode(FUN_CALL, NULL, 0);
+    AST_addchild(r, AST_mknode(IDENT, ident_text0, STR));
+    ASTnode* p = AST_mknode(ACTUAL_PARA_LIST, NULL, 0);
+    ASTnode* q = AST_mknode(ACTUAL_PARA_LIST, NULL, 0);
+    ASTnode* e;
+    AST_addchild(r, p);
+    while(1) {
+        e = expr();
+        AST_addchild(p, e);
+        AST_addchild(p, q);
+        if(match(RP)) {
+            w = gettoken();
+            return r;
+        }
+        if(match(COMMA)) {
+            p = q;
+            q = AST_mknode(ACTUAL_PARA_LIST, NULL, 0);
+            w = gettoken();
+            continue;
+        }
+        match_error(0, "函数调用中缺少逗号和分号导致终止");
+        return NULL;
+    }
 }
 ASTnode* arrayCall() {
     printf("检测到表达式中数组调用\n");
+    ASTnode* r = AST_mknode(ARRAY_CALL, NULL, 0);
+    AST_addchild(r, AST_mknode(IDENT, ident_text0, STR));
+    if(match_error(INT_CONST, "数组下标必须为整形常量")) return NULL;
+    AST_addchild(r, AST_mknode(INT_CONST, &int_value, INT));
+    if(getmatch_error(R2, "数组下标必须用方括号框起来")) return NULL;
+    return r;
 }
-ASTnode* LocArrDef() {
+ASTnode* LocVarDef() {
     if(pe) return NULL;
     printf("检测到局部变量定义\n");
     ASTnode* r = AST_mknode(LOC_VAR_DEF, NULL, 0);
     AST_addchild(r, AST_mknode(token_name, NULL, 0));
-    ASTnode* p = AST_mknode(LOC_VAR_LIST, NULL, 0));
+    ASTnode* p = AST_mknode(LOC_VAR_LIST, NULL, 0);
     AST_addchild(r, p);
 
-    AST_addchild(p, AST_mknode(IDENT, token_text0, STR));
+    AST_addchild(p, AST_mknode(IDENT, ident_text0, STR));
     ASTnode* e;
     if(match(ASSIGN)) {
         w = gettoken();
         e = expr();
     }
-    else e = AST_mknode(EXPRESSION, NULL, 0)
+    else e = AST_mknode(EXPRESSION, NULL, 0);
     AST_addchild(p, e);
-    ASTnode* q = AST_mknode(EXT_VAR_LIST, NULL, 0));
+    ASTnode* q = AST_mknode(EXT_VAR_LIST, NULL, 0);
     AST_addchild(p, q);
     p = q;
     while(1) {
@@ -730,13 +806,13 @@ ASTnode* LocArrDef() {
         }
         if(match(COMMA)) {
             if(getmatch_error(IDENT, "局部变量定义需要标识符")) return NULL;
-            AST_addchild(p, AST_mknode(IDENT, token_text0, STR));
+            AST_addchild(p, AST_mknode(IDENT, ident_text0, STR));
             if(getmatch(ASSIGN)) {
                 w = gettoken(); //可能为逗号分号
                 e = expr();
             }
             else e = AST_mknode(EXPRESSION, NULL, 0);
-            AST_addchild(p, e)
+            AST_addchild(p, e);
             AST_addchild(p, q);
             
             p = q;
@@ -747,5 +823,38 @@ ASTnode* LocArrDef() {
         return NULL;
     }
 }
-ASTnode* LocVarDef() {
+ASTnode* LocArrDef() {
+    if(pe) return NULL;
+    printf("检测到局部数组定义\n");
+    ASTnode* r = AST_mknode(LOC_ARR_DEF, NULL, 0);
+    AST_addchild(r, AST_mknode(token_name, NULL, 0)); //类型符
+    AST_addchild(r, AST_mknode(IDENT, ident_text0, STR)); //标识符
+    if(match_error(INT_CONST, "数组定义长度必须为整数")) return NULL;
+    if(int_value <= 0) {
+        match_error(0, "数组长度必须为正整数");
+        return NULL;
+    }
+    if(getmatch_error(R2, "数组定义中放括号未闭合")) return NULL;
+    /*
+    if(getmatch(ASSIGN)) {
+        if(getmatch_error(L3, "数组初始化必须以花括号开始")) return NULL;
+
+    }
+    else {
+        return r;
+    }*/
+    if(getmatch_error(SEMI, "数组定义语句非正常结尾")) return NULL;
+    return r;
+}
+
+//5、打印排版部分
+void     AST_show();
+void     AST_output();
+
+void main() {
+    fp = fopen("test.c", "r");
+    ASTnode* r = program();
+    if(pe) return;
+    //AST_show(r, 0);
+    //AST_output();
 }
