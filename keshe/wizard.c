@@ -469,9 +469,6 @@ int      isConst(int c) {
 }
 
 //4、语法分析部分，递归下降
-//默认协议：期待之前读取过，为后续操作读取token
-//自主协议：不期待，不为后续操作读取token
-//懒惰协议：期待之前读取过，不为后续操作读取token
 ASTnode* program() {
     ASTnode* r = AST_mknode(PROGRAM, NULL, 0);
     w = gettoken(); //程序的”第一动力“,这个token将会在外部定义中第一次被利用到
@@ -510,7 +507,7 @@ ASTnode* ExtDef() {
 }
 ASTnode* ExtArrDef() {
     if(pe) return NULL;
-    printf("检测到外部数组定义\n");
+    printf("\n检测到外部数组定义\n");
     ASTnode* r = AST_mknode(EXT_ARR_DEF, NULL, 0);
     AST_addchild(r, AST_mknode(token_name, NULL, 0));
     AST_addchild(r, AST_mknode(IDENT, ident_text0, STR));
@@ -522,7 +519,7 @@ ASTnode* ExtArrDef() {
 }
 ASTnode* ExtVarDef() {
     if(pe) return NULL;
-    printf("检测到外部变量定义\n");
+    printf("\n检测到外部变量定义\n");
     ASTnode* r = AST_mknode(EXT_VAR_DEF, NULL, 0);
     AST_addchild(r, AST_mknode(token_name, NULL, 0));
     ASTnode* p = AST_mknode(EXT_VAR_LIST, NULL, 0);
@@ -557,12 +554,12 @@ ASTnode* funDef() {
     AST_addchild(r, AST_mknode(token_name, NULL, 0));
     AST_addchild(r, formalPara());
     if(match(SEMI)) { 
-        printf("检测到函数声明\n");
+        printf("\n检测到函数声明\n");
         w = gettoken();
         return r;
     }
     if(match(L3)) {
-        printf("检测到函数定义\n");
+        printf("\n检测到函数定义\n");
         w = gettoken();
         AST_addchild(r, statementBlock());
         return r;
@@ -688,7 +685,7 @@ ASTnode* statement() {
             layerDown(); return r;
         case IDENT: //（最常见的）表达式语句
             printf("检测到表达式语句\n");
-            w = gettoken(); r = expr();
+            r = expr(); //IDENT是表达式的一部分
             if(match_error(SEMI, "表达式语句结束错误")) return NULL;
             w = gettoken(); return r;
         case CONTINUE:
@@ -704,6 +701,7 @@ ASTnode* statement() {
             r = AST_mknode(RETURN, NULL, 0);
             w = gettoken(); r1 = expr();
             if(match_error(SEMI, "表达式语句结束错误")) return NULL;
+            AST_addchild(r, r1);
             w = gettoken(); return r;
         case INT: //局部变量声明
         case CHAR: //局部变量声明
@@ -736,9 +734,7 @@ ASTnode* expr() {
     stack* opn = stack_init();//操作数栈
     push(op, AST_mknode(SS, NULL, 0));
     int error = 0;
-    while((!match(SS) || gettopname(op) != SS) && !error) {
-        printf("\t打印栈op："); stack_show(op);
-        printf("\t打印栈opn："); stack_show(opn);
+    while(!(match(SS) && gettopname(op) == SS) && !error) {
         if(match(IDENT)) { //函数调用、数组调用、或标识符
             strcpy(ident_text0, ident_text);
             if(getmatch(LP)) { //确认为函数调用
@@ -827,7 +823,7 @@ ASTnode* funCall() {
     ASTnode* e;
     AST_addchild(r, p);
     while(1) {
-        e = expr();
+        e = expr(); //已经读入一个IDENT或者
         AST_addchild(p, e);
         AST_addchild(p, q);
         if(match(RP)) {
@@ -998,6 +994,12 @@ void     AST_show(ASTnode* r, int n) {
             pt(n+1); printf("下挂条件：\n"); AST_show(ch1, n+2);
             pt(n+1); printf("IF子句：\n"); AST_show(ch2, n+2);
             return;
+        case IF_ELSE:           //<IF_ELSE语句>
+            pt(n); printf("IF_ELSE语句：\n");
+            pt(n+1); printf("下挂条件：\n"); AST_show(ch1, n+2);
+            pt(n+1); printf("IF子句：\n"); AST_show(ch2, n+2);
+            pt(n+1); printf("ELSE子句：\n"); AST_show(ch3, n+2);
+            return;
         case WHILE:             //<WHILE语句>
             pt(n); printf("WHILE语句：\n");
             pt(n+1); printf("循环条件：\n"); AST_show(ch1, n+2);
@@ -1045,12 +1047,14 @@ void     AST_showexpr(ASTnode* r) {
     int na = AST_getname(r);
     ASTnode* ch1 = AST_getchi(r, 1);
     ASTnode* ch2 = AST_getchi(r, 2);
-    printf("\n");
-    //printf("%d %d %d\n", ch1==NULL, ch2==NULL, na);
     if(isOp(na)) {                      //运算符
-        printf("("); AST_showexpr(ch1); printf(")");
+        printf("(");
+        AST_showexpr(ch1);
+        printf(")");
         printf("%s", keepwords[na-INT]);
-        printf("("); AST_showexpr(ch2); printf(")");
+        printf("(");
+        AST_showexpr(ch2);
+        printf(")");
     }
     else if(na == INT_CONST) {          //整数常量
         printf("%d", AST_getint(r));
@@ -1059,17 +1063,23 @@ void     AST_showexpr(ASTnode* r) {
         printf("%f", AST_getfloat(r));
     }
     else if(na == CHAR_CONST) {        //浮点数常量
-        printf("%c", AST_getchar(r));
+        char p = AST_getchar(r);
+        if(!p) printf("字符常量错误");
+        else printf("%c", p);
     }
     else if(na == IDENT) {              //标识符
-        printf("%s", AST_gettext(r));
+        char* p = AST_gettext(r);
+        if(!p) printf("标识符错误");
+        else printf("%s", p);
     }
     else if(na == EXPRESSION) {         //子表达式
         AST_showexpr(ch1);
     }
     else if(na == FUN_CALL) {           //函数调用
-        printf("%s", AST_gettext(ch1)); printf("(");
-        AST_showexpr(ch1);
+        char* p = AST_gettext(ch1);
+        if(!p) printf("函数调用错误");
+        printf("%s", p); printf("(");
+        AST_showexpr(ch2);
     }
     else if(na == ACTUAL_PARA_LIST) {   //函数实参列表
         AST_showexpr(ch1);
@@ -1088,20 +1098,6 @@ void     AST_showexpr(ASTnode* r) {
     }
 }
 void     AST_output() {
-}
-void     stack_show(stack* s) {
-    if(!s) {
-        printf("栈不存在\n");
-        return;
-    }
-    if(!(s->top)) {
-        printf("栈为空\n");
-        return;
-    }
-    for(ASTnode** i = s->A; i <= s->top; i++) {
-        printf("%s ", keepwords[AST_getname(*i)-INT]);
-    }
-    printf("\n");
 }
 
 void main() {
