@@ -26,6 +26,7 @@ enum token_kind {
     LOC_VAR_DEF,        //局部变量定义
     LOC_VAR_LIST,       //局部变量序列
     LOC_ARR_DEF,        //局部数组定义
+    LOC_ARR_LIST,       //局部数组序列
     EXPRESSION,         //表达式
     IF_ELSE,
 };
@@ -126,7 +127,6 @@ void     AST_show(ASTnode* r, int n);
 void     pt(int t);
 void     AST_showexpr(ASTnode* r);
 void     AST_output();
-void     stack_show(stack* );
 
 //函数定义-------------------------------------------------------------------
 //1、AST数据结构部分
@@ -845,10 +845,10 @@ ASTnode* arrayCall() {
     printf("检测到表达式中数组调用\n");
     ASTnode* r = AST_mknode(ARRAY_CALL, NULL, 0);
     AST_addchild(r, AST_mknode(IDENT, ident_text0, STR));
-    if(match_error(INT_CONST, "数组下标必须为整形常量")) return NULL;
-    AST_addchild(r, AST_mknode(INT_CONST, &int_value, INT));
-    if(getmatch_error(R2, "数组下标必须用方括号框起来")) return NULL;
-    return r;
+    ASTnode* r1 = expr();
+    if(match_error(R2, "数组下标必须用方括号框起来")) return NULL;
+    AST_addchild(r, r1);
+    w = gettoken(); return r;
 }
 ASTnode* LocVarDef() {
     if(pe) return NULL;
@@ -895,27 +895,80 @@ ASTnode* LocVarDef() {
     }
 }
 ASTnode* LocArrDef() {
+    int hasLength = 0;
+    int hasInitial = 0;
     if(pe) return NULL;
     printf("检测到局部数组定义\n");
     ASTnode* r = AST_mknode(LOC_ARR_DEF, NULL, 0);
     AST_addchild(r, AST_mknode(token_name, NULL, 0)); //类型符
     AST_addchild(r, AST_mknode(IDENT, ident_text0, STR)); //标识符
-    if(match_error(INT_CONST, "数组定义长度必须为整数")) return NULL;
-    if(int_value <= 0) {
-        match_error(0, "数组长度必须为正整数");
+    if(match(INT_CONST)) { //有初始值
+        hasLength = int_value;
+        if(int_value <= 0) {
+            match_error(0, "数组长度必须为正整数");
+            return NULL;
+        }
+        AST_addchild(r, AST_mknode(INT_CONST, &int_value, INT));
+        w = gettoken();
+    }
+    else { //没有初始值
+        int_value = 0;
+        AST_addchild(r, AST_mknode(INT_CONST, &int_value, INT)); //占位
+    }
+    if(match_error(R2, "数组定义中方括号未闭合")) return NULL;
+    if(getmatch(ASSIGN)) { //赋值
+        if(getmatch_error(L3, "数组初始化必须以花括号开始")) return NULL;
+        ASTnode* p = AST_mknode(LOC_ARR_LIST, NULL, 0);
+        ASTnode* q = AST_mknode(LOC_ARR_LIST, NULL, 0);
+        AST_addchild(r, p);
+        int tn; 
+        void* tv;
+        if(token_name == INT) {
+            tn = INT_CONST;
+            tv = &int_value;
+        }
+        else if(token_name == FLOAT) {
+            tn = FLOAT_CONST;
+            tv = &float_value;
+        }
+        else if(token_name == CHAR) {
+            tn = CHAR_CONST;
+            tv = &char_value;
+        }
+        else ;
+        while(1) {
+            w = gettoken();
+            if(!hasInitial && match(R3)) {
+                match_error(0, "局部数组定义初始化不应该为空");
+                return NULL;   
+            }
+            if(match_error(tn, "数组元素与数组类型不符")) return NULL;
+            hasInitial++;
+            AST_addchild(p, AST_mknode(tn, tv, token_name));
+            AST_addchild(p, q);
+            if(getmatch(R3)) { //结束
+                w = gettoken();
+                break;
+            }
+            if(match(COMMA)) {
+                p = q;
+                q = AST_mknode(LOC_ARR_LIST, NULL, 0);
+                continue;
+            }
+            match_error(0, "局部数组定义赋值缺少花括号和逗号导致错误");
+            return NULL;
+        }
+    }
+    if(!hasLength && !hasInitial) {
+        match_error(0, "局部数组定义不可以既没有长度又没有初始值");
         return NULL;
     }
-    if(getmatch_error(R2, "数组定义中放括号未闭合")) return NULL;
-    /*
-    if(getmatch(ASSIGN)) {
-        if(getmatch_error(L3, "数组初始化必须以花括号开始")) return NULL;
-
+    if(hasLength && hasInitial && (hasLength < hasInitial)) {
+        match_error(0, "局部数组定义中初始值数量不应该超过长度");
+        return NULL;
     }
-    else {
-        return r;
-    }*/
-    if(getmatch_error(SEMI, "数组定义语句非正常结尾")) return NULL;
-    return r;
+    if(match_error(SEMI, "数组定义语句非正常结尾")) return NULL;
+    w = gettoken(); return r;
 }
 
 //5、打印排版部分
@@ -942,6 +995,12 @@ void     AST_show(ASTnode* r, int n) {
             printf("\n");
             AST_show(ch2, 0);
             return;
+        case EXT_ARR_DEF:       //<外部数组定义>
+            printf("外部数组定义：\n");
+            pt(1); printf("类型：%s\n", keepwords[AST_getname(ch1)-INT]);
+            pt(1); printf("数组名：%s\n", AST_gettext(ch2));
+            pt(1); printf("长度：%d\n", AST_getint(ch3));
+            return;
         case EXT_VAR_DEF:       //<外部变量定义>
             printf("外部变量定义：\n");
             pt(1); printf("类型：%s\n", keepwords[AST_getname(ch1)-INT]);
@@ -955,7 +1014,6 @@ void     AST_show(ASTnode* r, int n) {
             pt(2); printf("IDENT：%s\n", AST_gettext(ch1));
             AST_show(ch2, 0);
             return;
-        case EXT_ARR_DEF:       //<外部数组定义>
         case FUN_DEF:           //<函数定义>
             if(ch3) {
                 printf("函数定义：\n");
@@ -1036,6 +1094,30 @@ void     AST_show(ASTnode* r, int n) {
             AST_show(ch2, n+1);
             AST_show(ch3, n);
             return;
+        case LOC_ARR_DEF:       //<局部数组定义>
+            pt(n); printf("局部数组定义：\n");
+            pt(n+1); printf("类型：%s\n", keepwords[AST_getname(ch1)-INT]);
+            token_name = AST_getname(ch1); //为下面打印做准备
+            pt(n+1); printf("数组名：%s\n", AST_gettext(ch2));
+            pt(n+1); printf("长度：%d\n", AST_getint(ch3));
+            if(!ch4) return;
+            pt(n+1); printf("初始值：\n");
+            AST_show(ch4, n+2);
+            return;
+        case LOC_ARR_LIST:      //<局部数组序列>
+            if(!ch1) return;
+            if(token_name == INT) {
+                pt(n); printf("INT_CONST：%d\n", AST_getint(ch1));
+            }
+            else if (token_name == FLOAT) {
+                pt(n); printf("FLOAT_CONST：%d\n", AST_getfloat(ch1));
+            }
+            else if (token_name == CHAR) {
+                pt(n); printf("CHAR_CONST：%d\n", AST_getchar(ch1));
+            }
+            else ;
+            AST_show(ch2, n);
+            return;
         default :
             return;
     }
@@ -1078,7 +1160,7 @@ void     AST_showexpr(ASTnode* r) {
     else if(na == FUN_CALL) {           //函数调用
         char* p = AST_gettext(ch1);
         if(!p) printf("函数调用错误");
-        printf("%s", p); printf("(");
+        printf("%s(", p);
         AST_showexpr(ch2);
     }
     else if(na == ACTUAL_PARA_LIST) {   //函数实参列表
@@ -1090,7 +1172,15 @@ void     AST_showexpr(ASTnode* r) {
         }
     }
     else if(na == ARRAY_CALL) {
-        //占位
+        char* p = AST_gettext(ch1);
+        if(!p) printf("数组调用错误");
+        printf("%s[", p);
+        if(AST_getname(ch2) == EXPRESSION) {
+            AST_showexpr(AST_getchi(ch2, 1));
+        }
+        else AST_showexpr(ch2);
+        printf("]");
+
     }
     else {
         printf("打印错误\n");
