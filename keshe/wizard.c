@@ -74,9 +74,9 @@ char char_value;
 ASTnode* AST_mknode(int n, void* t, int l);     //创建新结点
 int      AST_getname(ASTnode* r);               //得到结点名字
 char*    AST_gettext(ASTnode* r);               //得到IDENT结点的文本
-int*     AST_getint(ASTnode* r);                //得到INT_CONST的值
-float*   AST_getfloat(ASTnode* r);              //得到FLOAT_CONST的值
-char*    AST_getchar(ASTnode* r);               //得到CHAR_CONST的值
+int      AST_getint(ASTnode* r);                //得到INT_CONST的值
+float    AST_getfloat(ASTnode* r);              //得到FLOAT_CONST的值
+char     AST_getchar(ASTnode* r);               //得到CHAR_CONST的值
 ASTnode* AST_getchi(ASTnode* r, int n);         //得到第n个孩子结点
 int      AST_getchiname(ASTnode* r, int n);     //得到第n个孩子的结点token名字
 ASTnode* AST_getbro(ASTnode* r, int n);         //得到第n个兄弟结点
@@ -96,12 +96,15 @@ int      getmatch(int c);            //检测下一个token是否为给出
 int      match_error(int c, const char* s);
 int      getmatch_error(int c, const char* s);
 int      matchType_error(const char* s);
-int      matchOp(int c);             //检测是否为运算符
+int      matchOp();                //检测是否为运算符
+int      isConst(int c);
 void     layerUp();                  //递归增加一层
 void     layerDown();                //递归减少一层，并在完全结束之后负责额外读取
 void     looked();
 int      haslooked();
 int      rank(int t);
+int      isOp(int c);
+int      isConst(int c);
 //4、语法分析部分，递归下降
 ASTnode* program();         //<程序>入口
 ASTnode* ExtDefList();      //<外部定义序列>循环
@@ -121,7 +124,9 @@ ASTnode* LocVarDef();       //<局部变量定义>，<局部变量序列>循环
 //5、打印排版部分
 void     AST_show(ASTnode* r, int n);
 void     pt(int t);
+void     AST_showexpr(ASTnode* r);
 void     AST_output();
+void     stack_show(stack* );
 
 //函数定义-------------------------------------------------------------------
 //1、AST数据结构部分
@@ -179,19 +184,24 @@ ASTnode* AST_mknode(int n, void* t, int l) {
     else return r;
 }
 int      AST_getname(ASTnode* r) {
+    if(!r) return 0;
     return r->name;
 }
 char*    AST_gettext(ASTnode* r) {
+    if(!r) return NULL;
     return (r->text).pc;
 }
-int*     AST_getint(ASTnode* r) {
-    return (r->text).pi;
+int      AST_getint(ASTnode* r) {
+    if(!r) return 0;
+    return *((r->text).pi);
 }
-float*   AST_getfloat(ASTnode* r) {
-    return (r->text).pf;
+float    AST_getfloat(ASTnode* r) {
+    if(!r) return 0;
+    return *((r->text).pf);
 }
-char*    AST_getchar(ASTnode* r) {
-    return (r->text).pc;
+char     AST_getchar(ASTnode* r) {
+    if(!r) return 0;
+    return *((r->text).pc);
 }
 ASTnode* AST_getchi(ASTnode* r, int n) {
     if (n <= 0) return NULL;
@@ -249,27 +259,27 @@ stack*   stack_init() {
 }
 void     push(stack* s, ASTnode* n) {
     ASTnode** u = s->A + SMAX;
+    if (!(s->top)) { //第一次push
+        s->top = s->A; *(s->top) = n;
+    }
     if (s->top == u) {
         printf("栈上溢\n");
         return;
-    }
-    if (!s->top) { //第一次push
-        s->top = s->A;
     }
     (s->top)++; *(s->top) = n;
 }
 int      pop(stack* s, ASTnode** n) {
     ASTnode** b = s->A;
+    if (s->top == b) { //最后一次pop
+        *n = *(s->top); s->top = NULL;
+        return 1;
+    }
     if (s->top == NULL) {
         printf("栈下溢\n");
         return 0;
     }
-    if (s->top == b) { //最后一次pop
-        *n = *(s->top);
-        s->top = NULL;
-        return 1;
-    }
-    *n = *(s->top); (s->top)--; return 1;
+    *n = *(s->top); (s->top)--;
+    return 1;
 }
 ASTnode* gettop(stack* s) {
     if(!s->top) return NULL;
@@ -407,12 +417,8 @@ int      matchType_error(const char* s) {
     if(w==INT||w==FLOAT||w==CHAR) return 0;
     match_error(0, s);
 }
-int      matchOp(int c) {
-    if(w==LP||w==RP||w==MUL||w==DIV||w==MOD||w==ADD||w==SUB||
-       w==GT||w==LT||w==GE||w==LE||w==NEQ||w==EQ||
-       w==OR||w==AND||w==ASSIGN||w==COMMA||w==SS)
-       return 1;
-    return 0;
+int      matchOp() {
+    return isOp(w);
 }
 void     layerUp() {
     if(!layer) look = 0;
@@ -446,10 +452,20 @@ int      rank(int t) {
         case AND: return 11;
         case OR : return 12;
         case ASSIGN: return 14;
-        case COMMA: return 15;
+        //case COMMA: return 15;
         case SS : return 1000; //输入终止符，前面的运算符号都要执行，优先级最低
         default : return 0;
     }
+}
+int      isOp(int c) {
+    if(c==LP||c==RP||c==MUL||c==DIV||c==MOD||c==ADD||c==SUB||
+       c==GT||c==LT||c==GE||c==LE||c==NEQ||c==EQ||
+       c==OR||c==AND||c==ASSIGN||c==SS)
+       return 1;
+    return 0;
+}
+int      isConst(int c) {
+    return c==INT_CONST||c==FLOAT_CONST||c==CHAR_CONST;
 }
 
 //4、语法分析部分，递归下降
@@ -721,6 +737,8 @@ ASTnode* expr() {
     push(op, AST_mknode(SS, NULL, 0));
     int error = 0;
     while((!match(SS) || gettopname(op) != SS) && !error) {
+        printf("\t打印栈op："); stack_show(op);
+        printf("\t打印栈opn："); stack_show(opn);
         if(match(IDENT)) { //函数调用、数组调用、或标识符
             strcpy(ident_text0, ident_text);
             if(getmatch(LP)) { //确认为函数调用
@@ -752,7 +770,7 @@ ASTnode* expr() {
         else if(lp <= rp && w == RP) { //括号数不匹配
             token_name = w; w = SS; continue;
         }
-        else if(matchOp(w)) {
+        else if(matchOp()) {
             //括号未正常闭合
             if ((gettopname(op)==LP && match(SS))||(gettopname(op)==SS && match(RP))) {
                 error = 1;
@@ -907,7 +925,10 @@ ASTnode* LocArrDef() {
 //5、打印排版部分
 void     AST_show(ASTnode* r, int n) {
     if(!r) return;
-    ASTnode *ch1 = NULL, *ch2 = NULL, *ch3 = NULL;
+    ASTnode* ch1 = AST_getchi(r, 1);
+    ASTnode* ch2 = AST_getchi(r, 2);
+    ASTnode* ch3 = AST_getchi(r, 3);
+    ASTnode* ch4 = AST_getchi(r, 4);
     if(AST_getname(r) == PROGRAM) {
         printf("\n");
         for(int i = 0; i < 60; i++) printf("*");
@@ -916,50 +937,103 @@ void     AST_show(ASTnode* r, int n) {
         printf("\n\n");
     }
     switch(AST_getname(r)) {
-        case PROGRAM:       //<程序>
+        case PROGRAM:           //<程序>
             AST_show(AST_getchi(r, 1), 0);
             return;
-        case EXT_DEF_LIST:  //<外部定义序列>
-            ch1 = AST_getchi(r, 1);
-            ch2 = AST_getchi(r, 2);
+        case EXT_DEF_LIST:      //<外部定义序列>
             if(!ch1) return;
             AST_show(ch1, 0);
             printf("\n");
             AST_show(ch2, 0);
             return;
-        case EXT_VAR_DEF:   //<外部变量定义>
-            ch1 = AST_getchi(r, 1); //变量类型
-            ch2 = AST_getchi(r, 2); //变量序列
+        case EXT_VAR_DEF:       //<外部变量定义>
             printf("外部变量定义：\n");
             pt(1); printf("类型：%s\n", keepwords[AST_getname(ch1)-INT]);
             pt(1); printf("变量：\n");
             AST_show(ch2, 0);
             return;
-        case EXT_VAR_LIST:  //<外部变量序列>
+        case EXT_VAR_LIST:      //<外部变量序列>
             if(!AST_getchi(r, 1)) return;
             ch1 = AST_getchi(r, 1);
             ch2 = AST_getchi(r, 2);
             pt(2); printf("IDENT：%s\n", AST_gettext(ch1));
             AST_show(ch2, 0);
             return;
-        case EXT_ARR_DEF:   //<外部数组定义>
-        case FUN_DEF:       //<函数定义>
-            ch1 = AST_getchi(r, 1); //返回值类型
-            ch2 = AST_getchi(r, 2); //函数名
-            ch3 = AST_getchi(r, 3); //（可能存在的）函数体
+        case EXT_ARR_DEF:       //<外部数组定义>
+        case FUN_DEF:           //<函数定义>
             if(ch3) {
                 printf("函数定义：\n");
                 pt(1); printf("返回值类型：%s\n", keepwords[AST_getname(ch1)-INT]);
-                pt(1); printf("函数名：%s\n", AST_gettext(ch2));
-                AST_show(ch3, 0); //打印复合语句了
+                pt(1); printf("函数名：%s\n", AST_gettext(r));
+                pt(1); printf("形参：\n");
+                AST_show(ch2, 0);
+                pt(1); printf("函数体：\n");
+                AST_show(ch3, 2); //打印复合语句了
             }
             else {
                 printf("函数声明：\n");
                 pt(1); printf("返回值类型：%s\n", keepwords[AST_getname(ch1)-INT]);
-                pt(1); printf("函数名：%s\n", AST_gettext(ch2));
+                pt(1); printf("函数名：%s\n", AST_gettext(r));
             }
             return;
-        case :
+        case FORMAL_PARA:       //<形参>
+            AST_show(ch1, 0);
+            return;
+        case FORMAL_PARA_LIST:  //<形参列表>
+            if(!ch1) return;
+            pt(2); printf("形参类型：%s\n", keepwords[AST_getname(ch1)-INT]);
+            pt(2); printf("IDENT：%s\n", AST_gettext(ch2));
+            AST_show(ch3, 0);
+            return;
+        case STATEMENT_BLOCK:   //<复合语句>
+            AST_show(ch1, n);
+            return;
+        case STATEMENT_LIST:    //<语句序列>
+            if(!ch1) return;
+            AST_show(ch1, n);
+            AST_show(ch2, n);
+            return;
+        case IF:                //<IF语句>
+            pt(n); printf("IF语句：\n");
+            pt(n+1); printf("下挂条件：\n"); AST_show(ch1, n+2);
+            pt(n+1); printf("IF子句：\n"); AST_show(ch2, n+2);
+            return;
+        case WHILE:             //<WHILE语句>
+            pt(n); printf("WHILE语句：\n");
+            pt(n+1); printf("循环条件：\n"); AST_show(ch1, n+2);
+            pt(n+1); printf("循环体：\n"); AST_show(ch2, n+2);
+            return;
+        case FOR:               //<FOR语句>
+            pt(n); printf("FOR语句：\n");
+            pt(n+1); printf("初始子句：\n"); AST_show(ch1, n+2);
+            pt(n+1); printf("循环条件：\n"); AST_show(ch2, n+2);
+            pt(n+1); printf("结束子句：\n"); AST_show(ch3, n+2);
+            pt(n+1); printf("循环体：\n"); AST_show(ch4, n+2);
+            return;
+        case CONTINUE:          //<continue语句>
+            pt(n); printf("CONTINUE语句\n");
+            return;
+        case BREAK:             //<break语句>
+            pt(n); printf("BREAK语句\n");
+            return;
+        case RETURN:            //<return语句>
+            pt(n); printf("RETURN语句：\n"); AST_show(ch1, n+1);
+            return;
+        case EXPRESSION:        //<表达式语句>包括表达式部分
+            pt(n); printf("表达式：");
+            AST_showexpr(ch1);
+            printf("\n");
+            return;
+        case LOC_VAR_DEF:       //<局部变量定义>
+            pt(n); printf("局部变量定义：\n");
+            AST_show(ch2, n+1);
+            return;
+        case LOC_VAR_LIST:      //<局部变量序列>
+            if(!ch1) return;
+            pt(n); printf("IDENT：%s\n", AST_gettext(ch1));
+            AST_show(ch2, n+1);
+            AST_show(ch3, n);
+            return;
         default :
             return;
     }
@@ -967,7 +1041,67 @@ void     AST_show(ASTnode* r, int n) {
 void     pt(int t) {
     for(int i = 0; i < t; i++) printf("\t");
 }
+void     AST_showexpr(ASTnode* r) {
+    int na = AST_getname(r);
+    ASTnode* ch1 = AST_getchi(r, 1);
+    ASTnode* ch2 = AST_getchi(r, 2);
+    printf("\n");
+    //printf("%d %d %d\n", ch1==NULL, ch2==NULL, na);
+    if(isOp(na)) {                      //运算符
+        printf("("); AST_showexpr(ch1); printf(")");
+        printf("%s", keepwords[na-INT]);
+        printf("("); AST_showexpr(ch2); printf(")");
+    }
+    else if(na == INT_CONST) {          //整数常量
+        printf("%d", AST_getint(r));
+    }
+    else if(na == FLOAT_CONST) {        //浮点数常量
+        printf("%f", AST_getfloat(r));
+    }
+    else if(na == CHAR_CONST) {        //浮点数常量
+        printf("%c", AST_getchar(r));
+    }
+    else if(na == IDENT) {              //标识符
+        printf("%s", AST_gettext(r));
+    }
+    else if(na == EXPRESSION) {         //子表达式
+        AST_showexpr(ch1);
+    }
+    else if(na == FUN_CALL) {           //函数调用
+        printf("%s", AST_gettext(ch1)); printf("(");
+        AST_showexpr(ch1);
+    }
+    else if(na == ACTUAL_PARA_LIST) {   //函数实参列表
+        AST_showexpr(ch1);
+        if(!AST_getchi(ch2, 1)) printf(")");
+        else {
+            printf(",");
+            AST_showexpr(ch2);
+        }
+    }
+    else if(na == ARRAY_CALL) {
+        //占位
+    }
+    else {
+        printf("打印错误\n");
+        return;
+    }
+}
 void     AST_output() {
+}
+void     stack_show(stack* s) {
+    if(!s) {
+        printf("栈不存在\n");
+        return;
+    }
+    if(!(s->top)) {
+        printf("栈为空\n");
+        return;
+    }
+    for(ASTnode** i = s->A; i <= s->top; i++) {
+        printf("%s ", keepwords[AST_getname(*i)-INT]);
+    }
+    printf("\n");
 }
 
 void main() {
@@ -976,4 +1110,5 @@ void main() {
     if(pe) return;
     AST_show(r, 0);
     //AST_output();
+    fclose(fp);
 }
