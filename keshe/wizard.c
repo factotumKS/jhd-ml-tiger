@@ -3,6 +3,7 @@
 #include<string.h>
 #define IMAX 32
 #define SMAX 100
+#define MMAX 256
 #define KWNUM 11
 
 enum token_kind {
@@ -57,12 +58,14 @@ typedef struct stack_ {
 } stack;
 
 //全局变量------------------------------------------------------------------
-FILE* fp;   //指向被解析的源文件
-int w;      //当前读取的tokenname
-int row;    //当前行号
-int pe;     //存在解析错误
-int layer;  //在<语句>的多重递归中计数
-int look;   //在<语句>的多重递归中记录是否已经向后面看了一个非自身token
+FILE* fp;       //指向被解析的源文件
+ASTnode* pr;    //预处理部分
+int w;          //当前读取的tokenname
+int row;        //当前行号
+int pe;         //存在解析错误
+int layer;      //在<语句>的多重递归中计数
+int look;       //在<语句>的多重递归中记录是否已经向后面看了一个非自身token
+char macro_text[]
 char ident_text[IMAX];
 char ident_text0[IMAX];
 int token_name;
@@ -86,7 +89,7 @@ void     AST_addchild(ASTnode* r, ASTnode* c);  //为r添加一个孩子
 //2、Stack数据结构部分
 stack*   stack_init();               //
 void     push(stack* s, ASTnode* n); //
-int      pop(stack* s, ASTnode** n);  //
+int      pop(stack* s, ASTnode** n); //
 ASTnode* gettop(stack* s);           //
 int      gettopname(stack* s);       //
 //3、词法分析部分
@@ -97,7 +100,7 @@ int      getmatch(int c);            //检测下一个token是否为给出
 int      match_error(int c, const char* s);
 int      getmatch_error(int c, const char* s);
 int      matchType_error(const char* s);
-int      matchOp();                //检测是否为运算符
+int      matchOp();                  //检测是否为运算符
 int      isConst(int c);
 void     layerUp();                  //递归增加一层
 void     layerDown();                //递归减少一层，并在完全结束之后负责额外读取
@@ -106,8 +109,10 @@ int      haslooked();
 int      rank(int t);
 int      isOp(int c);
 int      isConst(int c);
+void     keepmacro();               //生成宏定义结点
+void     keepBcomment();            //生成块注释结点
+void     keepRcomment();            //生成行注释结点
 //4、语法分析部分，递归下降
-ASTnode* prepare();         //预处理，准备注释和源文件
 ASTnode* program();         //<程序>入口
 ASTnode* ExtDefList();      //<外部定义序列>循环
 ASTnode* ExtDef();          //<外部变量定义>、<外部数组定义>、<函数定义>、选择
@@ -317,6 +322,24 @@ int      gettoken0() {
         if (c == '\n') row += 1;
     }
 
+    //处理宏并单独制作结点
+    while (c == '#') {
+        keepmacro();
+        c = fgetc(fp);
+    }
+
+    //处理注释并单独制作结点
+    while (c = '/') {
+        c = fgetc(fp);
+        if     (c == '*') keepBcomment();
+        else if(c == '/') keepRcomment();
+        else {
+            ungetc(c, fp);
+            break;
+        }
+        c = fgetc(fp);
+    }
+    
     //处理标识符 关键字
     if ((c>='a' && c<= 'z') || (c>='A' && c<= 'Z')) {
         int i = 0;
@@ -470,11 +493,19 @@ int      isOp(int c) {
 int      isConst(int c) {
     return c==INT_CONST||c==FLOAT_CONST||c==CHAR_CONST;
 }
+void     keepmacro() {
+    while(c = fgetc(fp)) {
+        
+    }
+}
+void     keepBcomment() {
+
+}
+void     keepRcomment() {
+
+}
 
 //4、语法分析部分，递归下降
-ASTnode* prepare() {
-    
-}
 ASTnode* program() {
     printf("\n");
     for(int i = 0; i < 60; i++) printf("*");
