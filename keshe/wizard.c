@@ -124,9 +124,11 @@ ASTnode* LocArrDef();       //<数组>生成，用于处理表达式中的数组
 ASTnode* LocVarDef();       //<局部变量定义>，<局部变量序列>循环
 //5、打印排版部分
 void     AST_show(ASTnode* r, int n);
-void     pt(int t);
 void     AST_showexpr(ASTnode* r);
+void     pt(int t);
 void     AST_output();
+void     AST_outputexpr(ASTnode* r);
+void     fpt(int t);
 
 //函数定义-------------------------------------------------------------------
 //1、AST数据结构部分
@@ -1091,6 +1093,7 @@ void     AST_show(ASTnode* r, int n) {
             return;
         case LOC_VAR_DEF:       //<局部变量定义>
             pt(n); printf("局部变量定义：\n");
+            pt(n+1); printf("类型：%s\n", AST_gettext(ch1));
             AST_show(ch2, n+1);
             return;
         case LOC_VAR_LIST:      //<局部变量序列>
@@ -1196,7 +1199,62 @@ void     AST_showexpr(ASTnode* r) {
     }
 }
 void     AST_outputexpr(ASTnode* r) {
+    int na = AST_getname(r);
+    ASTnode* ch1 = AST_getchi(r, 1);
+    ASTnode* ch2 = AST_getchi(r, 2);
+    if(isOp(na)) {                      //运算符
+        AST_outputexpr(ch1);
+        printf(fp, " %s ", keepwords[na-INT]);
+        AST_outputexpr(ch2);
+    }
+    else if(na == INT_CONST) {          //整数常量
+        fprintf(fp, "%d", AST_getint(r));
+    }
+    else if(na == FLOAT_CONST) {        //浮点数常量
+        fprintf(fp, "%f", AST_getfloat(r));
+    }
+    else if(na == CHAR_CONST) {        //浮点数常量
+        char p = AST_getchar(r);
+        if(!p) printf("字符常量错误");
+        else fprintf(fp, "\'%c\'", p);
+    }
+    else if(na == IDENT) {              //标识符
+        char* p = AST_gettext(r);
+        if(!p) printf("标识符错误");
+        else fprintf(fp, "%s", p);
+    }
+    else if(na == EXPRESSION) {         //子表达式
+        AST_outputexpr(ch1);
+    }
+    else if(na == FUN_CALL) {           //函数调用
+        char* p = AST_gettext(ch1);
+        if(!p) printf("函数调用错误");
+        printf(fp, "%s(", p);
+        AST_outputexpr(ch2);
+    }
+    else if(na == ACTUAL_PARA_LIST) {   //函数实参列表
+        AST_outputexpr(ch1);
+        if(!AST_getchi(ch2, 1)) fprintf(fp, ")");
+        else {
+            fprintf(fp, ", ");
+            AST_outputexpr(ch2);
+        }
+    }
+    else if(na == ARRAY_CALL) {
+        char* p = AST_gettext(ch1);
+        if(!p) printf("数组调用错误");
+        printf(fp, "%s[", p);
+        if(AST_getname(ch2) == EXPRESSION) {
+            AST_outputexpr(AST_getchi(ch2, 1));
+        }
+        else AST_outputexpr(ch2);
+        printf(fp, "]");
 
+    }
+    else {
+        printf("打印错误\n");
+        return;
+    }
 }
 void     AST_output(ASTnode* r) {
     if(!r) return;
@@ -1272,7 +1330,7 @@ void     AST_output(ASTnode* r) {
         AST_output(ch2, n);
         return;
     case IF:                //<IF语句>
-        fpt(n); printf(fp, "if("); AST_outputexpr(ch1, 0); fprintf(fp, ") ");
+        fpt(n); printf(fp, "if("); AST_outputexpr(ch1); fprintf(fp, ") ");
         if(AST_getname(ch2) == STATEMENT_BLOCK) {
             AST_output(ch2, n+1);
         }
@@ -1281,7 +1339,7 @@ void     AST_output(ASTnode* r) {
         }
         return;
     case IF_ELSE:           //<IF_ELSE语句>
-        fpt(n); printf(fp, "if("); AST_outputexpr(ch1, 0); fprintf(fp, ") ");
+        fpt(n); printf(fp, "if("); AST_outputexpr(ch1); fprintf(fp, ") ");
         if(AST_getname(ch2) == STATEMENT_BLOCK) {
             AST_output(ch2, n+1);
         }
@@ -1297,7 +1355,7 @@ void     AST_output(ASTnode* r) {
         }
         return;
     case WHILE:             //<WHILE语句>
-        fpt(n); printf(fp, "while("); AST_outputexpr(ch1, 0); fprintf(fp, ") ");
+        fpt(n); printf(fp, "while("); AST_outputexpr(ch1); fprintf(fp, ") ");
         if(AST_getname(ch2) == STATEMENT_BLOCK) {
             AST_output(ch2, n+1);
         }
@@ -1306,7 +1364,7 @@ void     AST_output(ASTnode* r) {
         }
         return;
     case FOR:               //<FOR语句>
-        fpt(n); printf(fp, "for("); AST_outputexpr(ch1, 0); fprintf(fp, "; ");
+        fpt(n); printf(fp, "for("); AST_outputexpr(ch1); fprintf(fp, "; ");
         AST_outputexpr(ch2, 0); fprintf(fp, "; ");
         AST_outputexpr(ch3, 0); fprintf(fp, ") ");
         if(AST_getname(ch4) == STATEMENT_BLOCK) {
@@ -1327,28 +1385,39 @@ void     AST_output(ASTnode* r) {
         return;
     case EXPRESSION:        //<表达式语句>包括表达式部分
         fpt(n);
-        AST_showexpr(ch1);
+        AST_outputexpr(ch1);
         printf("\n");
         return;
     case LOC_VAR_DEF:       //<局部变量定义>
-        AST_output(ch2, n);
+        fprintf(fp, "%s ", keepwords[AST_getname(ch1)-INT]);
+        AST_output(ch2, 0);
+        fprintf(fp, "\n");
         return;
     case LOC_VAR_LIST:      //<局部变量序列>
-        if(!ch1) return;
-        pt(n); printf("IDENT：%s\n", AST_gettext(ch1));
-        AST_show(ch2, n+1);
-        AST_show(ch3, n);
+        if(!AST_getchi(r, 1)) return;
+        fprintf(fp, "%s\n", AST_gettext(ch1));
+        if(!AST_getchi(ch2, 1)) {
+            AST_showexpr(AST_getchi(ch2, 1));
+        }
+        if(!AST_getchi(ch3, 1)) {
+            fprintf(fp, ";");
+        }
+        else {
+            fprintf(fp, ", ")
+            AST_output(ch2, 0);
+        }
         return;
     case LOC_ARR_DEF:       //<局部数组定义>
-        pt(n); printf("局部数组定义：\n");
-        pt(n+1); printf("类型：%s\n", keepwords[AST_getname(ch1)-INT]);
+        /*
+        fpt(n); fprintf("类型：%s\n", keepwords[AST_getname(ch1)-INT]);
         token_name = AST_getname(ch1); //为下面打印做准备
-        pt(n+1); printf("数组名：%s\n", AST_gettext(ch2));
-        pt(n+1); printf("长度：%d\n", AST_getint(ch3));
+        fpt(n); fprintf("数组名：%s\n", AST_gettext(ch2));
+        fpt(n); fprintf("长度：%d\n", AST_getint(ch3));
         if(!ch4) return;
-        pt(n+1); printf("初始值：\n");
+        fpt(n); fprintf("初始值：\n");
         AST_show(ch4, n+2);
         return;
+        */
     case LOC_ARR_LIST:      //<局部数组序列>
 }
 
