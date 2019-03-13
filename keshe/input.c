@@ -13,7 +13,7 @@ int fact1   (int a);
 int 
 fact2   (int a);
 
-int addi (int a, int b){
+int addi /*test*/(int a, int b){
     return 1+ 2;
 }
 

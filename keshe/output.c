@@ -1,18 +1,26 @@
+//define a 100;
+//wahthappen
+//test
+
+#include "myheader.h"
+#include <stdio.h>
+#define a 100
+
 int i, r, c;
 
 int A[100];
 
-int addi (int a);
+int addi(int a);
 
-int fact1 (int a);
+int fact1(int a);
 
-int fact2 (int a);
+int fact2(int a);
 
-int addi (int a){
+int addi(int a) {
 	return 1 + 2;
 }
 
-int fact1 (int a){
+int fact1(int a) {
 	int B[1] = {1}
 	int i, 1;
 
@@ -23,7 +31,7 @@ int fact1 (int a){
 	return i;
 }
 
-int fact2 (int a){
+int fact2(int a) {
 	int sum;
 	if(a > 0) 
 		if(b > 0) 
@@ -34,7 +42,7 @@ int fact2 (int a){
 	return sum;
 }
 
-int isodd (int a){
+int isodd(int a) {
 	if(a % 2 == 1) {
 		if(a > 0) 
 			return 1;
@@ -44,7 +52,7 @@ int isodd (int a){
 	return 0;
 }
 
-int main (){
+int main() {
 	int a, 7;
 
 	int c;

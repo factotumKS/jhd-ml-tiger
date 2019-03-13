@@ -1,9 +1,8 @@
 #include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
-#define IMAX 32
+#define IMAX 512
 #define SMAX 100
-#define MMAX 256
 #define KWNUM 11
 
 enum token_kind {
@@ -30,6 +29,10 @@ enum token_kind {
     LOC_ARR_LIST,       //局部数组序列
     EXPRESSION,         //表达式
     IF_ELSE,
+    MACRO_LIST,         //宏列表
+    MACRO,              //宏
+    COMMENT_LIST,       //注释序列
+    COMMENT,            //注释
 };
 
 char* keepwords[] = {
@@ -59,13 +62,13 @@ typedef struct stack_ {
 
 //全局变量------------------------------------------------------------------
 FILE* fp;       //指向被解析的源文件
-ASTnode* pr;    //预处理部分
+ASTnode* pr;    //头文件和宏部分
+ASTnode* pc;    //注释部分
 int w;          //当前读取的tokenname
 int row;        //当前行号
 int pe;         //存在解析错误
 int layer;      //在<语句>的多重递归中计数
 int look;       //在<语句>的多重递归中记录是否已经向后面看了一个非自身token
-char macro_text[]
 char ident_text[IMAX];
 char ident_text0[IMAX];
 int token_name;
@@ -329,14 +332,25 @@ int      gettoken0() {
     }
 
     //处理注释并单独制作结点
-    while (c = '/') {
+    while (c == '/') {
         c = fgetc(fp);
-        if     (c == '*') keepBcomment();
-        else if(c == '/') keepRcomment();
+        if (c == '*') {
+            keepBcomment();
+            c = fgetc(fp);
+        }
+        else if(c == '/') {
+            keepRcomment();
+            c = fgetc(fp);
+        }
         else {
             ungetc(c, fp);
             break;
         }
+    }
+
+    //再次处理全部空白符
+    while (c == ' '|| c == '\t'|| c == '\n'){
+        if (c == '\n') row += 1;
         c = fgetc(fp);
     }
     
@@ -494,15 +508,61 @@ int      isConst(int c) {
     return c==INT_CONST||c==FLOAT_CONST||c==CHAR_CONST;
 }
 void     keepmacro() {
+    char c;
+    ident_text[0] = '#';
+    int i = 1;
     while(c = fgetc(fp)) {
-        
+        if(c == '\n') {
+            row++;
+            break;
+        }
+        ident_text[i] = c;
+        i++;
     }
+    ident_text[i] = 0;
+    ASTnode* p = pr;
+    while(AST_getchi(p, 2)) p = AST_getchi(p, 2);
+    AST_addchild(p, AST_mknode(MACRO, ident_text, STR));
+    AST_addchild(p, AST_mknode(MACRO_LIST, NULL, 0));
 }
 void     keepBcomment() {
-
+    char c;
+    int i = 0;
+    while(c = fgetc(fp)) {
+        if(c == '\n') row++;
+        if(c == '*') {
+            if((c = fgetc(fp)) && c == '/') break;
+            else {
+                ungetc(c, fp);
+                ident_text[i] = '*';
+                i++;
+            }
+        }
+        ident_text[i] = c;
+        i++;
+    }
+    ident_text[i] = 0;
+    ASTnode* p = pc;
+    while(AST_getchi(p, 2)) p = AST_getchi(p, 2);
+    AST_addchild(p, AST_mknode(COMMENT, ident_text, STR));
+    AST_addchild(p, AST_mknode(COMMENT_LIST, &row, INT));
 }
 void     keepRcomment() {
-
+    char c;
+    int i = 0;
+    while(c = fgetc(fp)) {
+        if(c == '\n') {
+            row++;
+            break;
+        }
+        ident_text[i] = c;
+        i++;
+    }
+    ident_text[i] = 0;
+    ASTnode* p = pc;
+    while(AST_getchi(p, 2)) p = AST_getchi(p, 2);
+    AST_addchild(p, AST_mknode(COMMENT, ident_text, STR));
+    AST_addchild(p, AST_mknode(COMMENT_LIST, &row, INT));
 }
 
 //4、语法分析部分，递归下降
@@ -1026,6 +1086,22 @@ void     AST_show(ASTnode* r, int n) {
         printf("\n二、下面开始打印AST\n");
         for(int i = 0; i < 60; i++) printf("*");
         printf("\n\n");
+        ASTnode* p;
+        p = pc; //打印注释
+        while(AST_getchi(p, 1)) {
+            ASTnode* pch1 = AST_getchi(p, 1);
+            ASTnode* pch2 = AST_getchi(p, 2);
+            printf("注释第%d行：%s\n", AST_getint(pch2), AST_gettext(pch1));
+            p = pch2;
+        }
+        printf("\n");
+        p = pr; //打印宏定义
+        while(AST_getchi(p, 1)) {
+            ASTnode* pch1 = AST_getchi(p, 1);
+            printf("预定义和宏：%s\n", AST_gettext(pch1));
+            p = AST_getchi(p, 2);
+        }
+        printf("\n");
     }
     switch(AST_getname(r)) {
         case PROGRAM:           //<程序>
@@ -1303,6 +1379,22 @@ void     AST_output(ASTnode* r, int n) {
         printf("\n三、下面开始根据AST生成C源文件\n");
         for(int i = 0; i < 60; i++) printf("*");
         printf("\n\n");
+        ASTnode* p;
+        p = pc; //打印注释
+        while(AST_getchi(p, 1)) {
+            ASTnode* pch1 = AST_getchi(p, 1);
+            ASTnode* pch2 = AST_getchi(p, 2);
+            fprintf(fp, "//%s\n", AST_gettext(pch1));
+            p = pch2;
+        }
+        fprintf(fp, "\n");
+        p = pr; //打印宏定义
+        while(AST_getchi(p, 1)) {
+            ASTnode* pch1 = AST_getchi(p, 1);
+            fprintf(fp, "%s\n", AST_gettext(pch1));
+            p = AST_getchi(p, 2);
+        }
+        fprintf(fp, "\n");
     }
     switch(AST_getname(r)) {
         case PROGRAM:           //<程序>
@@ -1338,9 +1430,12 @@ void     AST_output(ASTnode* r, int n) {
             return;
         case FUN_DEF:           //<函数定义>
             fprintf(fp, "%s ", keepwords[AST_getname(ch1)-INT]); //返回值类型
-            fprintf(fp, "%s ", AST_gettext(r)); //函数名
+            fprintf(fp, "%s", AST_gettext(r)); //函数名
             AST_output(ch2, 0); //打印形参
-            if(ch3) AST_output(ch3, 1); //打印复合语句
+            if(ch3) {
+                fprintf(fp, " ");
+                AST_output(ch3, 1);
+            }
             else fprintf(fp, ";\n");
             return;
         case FORMAL_PARA:       //<形参>
@@ -1482,11 +1577,12 @@ void     AST_output(ASTnode* r, int n) {
 }
 
 void main() {
-    //预处理
-    //ASTnode* c = prepare();
+    //初始化野指针
+    pr = AST_mknode(MACRO_LIST, NULL, 0);
+    pc = AST_mknode(COMMENT_LIST, NULL, 0);
 
     //语法分析和词法分析
-    fp = fopen("test.c", "r");
+    fp = fopen("input.c", "r");
     ASTnode* r = program();
     if(pe) return;
     fclose(fp);
