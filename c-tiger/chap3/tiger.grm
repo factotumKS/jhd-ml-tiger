@@ -24,20 +24,134 @@ void yyerror(char *s)
 %token 
   COMMA COLON SEMICOLON LPAREN RPAREN LBRACK RBRACK 
   LBRACE RBRACE DOT 
-  PLUS MINUS TIMES DIVIDE EQ NEQ LT LE GT GE
-  AND OR ASSIGN
   ARRAY IF THEN ELSE WHILE FOR TO DO LET IN END OF 
   BREAK NIL
   FUNCTION VAR TYPE 
+
+%nonassoc ASSIGN
+%left AND OR 
+%nonassoc EQ NEQ LT LE GT GE
+%left PLUS MINUS
+%left TIMES DIVIDE
+%left UMINUS
 
 %start program
 
 %%
 
-program:	exp
+program
+	: exp
 
-exp:   ID
+exp 
+	: exp_val
+	| exp_seq
+	| exp_op
+	| exp_call
+	| exp_create
+	| exp_assign
+	| exp_if
+	| exp_while
+	| exp_for
+	| exp_break
+	| exp_let
+	| error {}
 
+exp_val	
+	: INT
+	| STRING
+	| NIL
+	| lvalue
 
+exp_seq 
+	: LPAREN seqfields RPAREN
 
+exp_op	
+	: exp PLUS exp
+	| exp MINUS exp
+	| exp TIMES exp
+	| exp DIVIDE exp
+	| exp EQ exp
+	| exp NEQ exp
+	| exp LT exp
+	| exp LE exp
+	| exp GT exp
+	| exp GE exp
+	| exp AND exp
+	| exp OR exp
+	| MINUS exp %prec UMINUS
 	
+exp_call
+	: ID LPAREN argfields RPAREN
+
+exp_create
+	: ID LBRACE recordfields RBRACE
+	| ID LBRACK exp RBRACK exp
+
+exp_assign
+	: lvalue ASSIGN exp
+
+exp_if
+	: IF exp THEN exp
+	| IF exp THEN exp ELSE exp
+
+exp_while
+	: WHILE exp DO exp
+			
+exp_for
+	: FOR ID ASSIGN exp TO exp DO exp
+
+exp_break
+	: BREAK
+
+exp_let
+	: LET decs IN exp_seq END
+
+lvalue
+	: ID
+	| lvalue DOT ID
+	| lvalue LBRACK exp RBRACK
+
+seqfields
+	:
+	| exp
+	| exp SEMICOLON seqfields
+	
+argfields
+	: 
+	| ID
+	| ID COMMA argfields
+
+recordfields
+	: ID EQ exp
+	| ID EQ exp COMMA recordfields
+
+decs
+	:
+	| dec decs
+
+dec 
+	: typdec
+	| vardec
+	| fundec
+
+typdec 
+	: TYPE ID EQ ty
+
+ty  
+	: ID
+	| LBRACE tyfields RBRACE
+	| ARRAY OF ID
+
+tyfields
+	:
+	| ID COLON ID
+	| ID COLON ID COMMA tyfields
+
+vardec
+	: VAR ID ASSIGN exp
+	| VAR ID COLON ID ASSIGN exp
+
+fundec
+	: FUNCTION ID LPAREN tyfields RPAREN EQ exp
+	| FUNCTION ID LPAREN tyfields RPAREN COLON ID EQ exp
+

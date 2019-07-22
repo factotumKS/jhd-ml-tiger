@@ -1,0 +1,7 @@
+cc -g -c parsetest.c
+yacc -dv tiger.grm
+cc -g -c y.tab.c
+cc -g -c lex.yy.c
+cc -g -c errormsg.c
+cc -g -c util.c
+cc -g parsetest.o y.tab.o lex.yy.o errormsg.o util.o
